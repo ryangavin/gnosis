@@ -40,7 +40,9 @@ export function readDocRef(targetRoot: string, relPath: string): DocFileRef | un
   const paragraphs = text.split(/\n\s*\n/);
   const body = paragraphs.find((p) => {
     const t = p.trim();
-    return t && !t.startsWith('#') && !t.startsWith('```') && !t.startsWith('|');
+    if (!t || t.startsWith('#') || t.startsWith('```') || t.startsWith('|')) return false;
+    if (/^\[?!\[/.test(t)) return false; // badge or image line, not prose
+    return true;
   });
   const excerpt = (body ?? '').trim().replace(/\s+/g, ' ').slice(0, 400);
   return { path: relPath, title, excerpt };
