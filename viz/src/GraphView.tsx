@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import cytoscape from 'cytoscape';
 import fcose from 'cytoscape-fcose';
+import { oklch } from './color.ts';
 import type { DerivedView } from './derive.ts';
 
 cytoscape.use(fcose);
@@ -14,7 +15,7 @@ interface Props {
   onToggle: (id: string) => void;
 }
 
-const hsl = (h: number, s: number, l: number): string => `hsl(${h}, ${s}%, ${l}%)`;
+const hueOf = (ele: cytoscape.NodeSingular): number => ele.data('hue') as number;
 
 function buildStyle(): cytoscape.StylesheetJson {
   return [
@@ -39,8 +40,8 @@ function buildStyle(): cytoscape.StylesheetJson {
         'font-weight': 500,
         'text-valign': 'center',
         'text-halign': 'center',
-        'background-color': (ele: cytoscape.NodeSingular) => hsl(ele.data('hue'), 30, 16),
-        'border-color': (ele: cytoscape.NodeSingular) => hsl(ele.data('hue'), 40, 42),
+        'background-color': (ele: cytoscape.NodeSingular) => oklch(0.31, 0.05, hueOf(ele)),
+        'border-color': (ele: cytoscape.NodeSingular) => oklch(0.56, 0.1, hueOf(ele)),
       },
     },
     {
@@ -53,8 +54,8 @@ function buildStyle(): cytoscape.StylesheetJson {
         'min-zoomed-font-size': 7,
         'text-valign': 'center',
         'text-halign': 'center',
-        'background-color': (ele: cytoscape.NodeSingular) => hsl(ele.data('hue'), 22, 14),
-        'border-color': (ele: cytoscape.NodeSingular) => hsl(ele.data('hue'), 30, 34),
+        'background-color': (ele: cytoscape.NodeSingular) => oklch(0.27, 0.04, hueOf(ele)),
+        'border-color': (ele: cytoscape.NodeSingular) => oklch(0.46, 0.07, hueOf(ele)),
       },
     },
     {
@@ -69,9 +70,9 @@ function buildStyle(): cytoscape.StylesheetJson {
         'text-halign': 'center',
         'text-margin-y': 3,
         'background-color': (ele: cytoscape.NodeSingular) =>
-          ele.data('confirmed') ? hsl(ele.data('hue'), 55, 55) : hsl(ele.data('hue'), 25, 12),
+          ele.data('confirmed') ? oklch(0.74, 0.13, hueOf(ele)) : oklch(0.26, 0.03, hueOf(ele)),
         'background-opacity': (ele: cytoscape.NodeSingular) => (ele.data('confirmed') ? 1 : 0.4),
-        'border-color': (ele: cytoscape.NodeSingular) => hsl(ele.data('hue'), 45, 50),
+        'border-color': (ele: cytoscape.NodeSingular) => oklch(0.6, 0.11, hueOf(ele)),
       },
     },
     {
@@ -85,9 +86,9 @@ function buildStyle(): cytoscape.StylesheetJson {
     {
       selector: ':parent',
       style: {
-        'background-color': (ele: cytoscape.NodeSingular) => hsl(ele.data('hue'), 30, 20),
+        'background-color': (ele: cytoscape.NodeSingular) => oklch(0.36, 0.05, hueOf(ele)),
         'background-opacity': 0.08,
-        'border-color': (ele: cytoscape.NodeSingular) => hsl(ele.data('hue'), 30, 32),
+        'border-color': (ele: cytoscape.NodeSingular) => oklch(0.44, 0.06, hueOf(ele)),
         'border-width': 1,
         'text-valign': 'top',
         'text-halign': 'center',
@@ -109,27 +110,38 @@ function buildStyle(): cytoscape.StylesheetJson {
       style: {
         'curve-style': 'bezier',
         width: 'data(w)',
-        'line-color': '#6a707c',
-        'target-arrow-color': '#6a707c',
-        'target-arrow-shape': 'triangle',
-        'arrow-scale': 0.55,
+        'line-fill': 'linear-gradient',
+        'line-gradient-stop-colors': (ele: cytoscape.EdgeSingular) =>
+          `${oklch(0.55, 0.08, ele.data('sh') as number)} ${oklch(0.55, 0.08, ele.data('th') as number)}`,
+        'line-gradient-stop-positions': '0% 100%',
+        'target-arrow-color': (ele: cytoscape.EdgeSingular) =>
+          oklch(0.66, 0.11, ele.data('th') as number),
+        'target-arrow-shape': 'vee',
+        'arrow-scale': 0.8,
         'line-style': 'dashed',
         'line-dash-pattern': [2, 5],
-        opacity: 0.28,
-      },
+        opacity: 0.3,
+      } as unknown as cytoscape.Css.Edge,
     },
     {
       selector: 'edge[runtime > 0]',
       style: {
         'line-style': 'solid',
-        'line-color': '#a9b0bc',
-        'target-arrow-color': '#a9b0bc',
-        opacity: 0.65,
-      },
+        'line-gradient-stop-colors': (ele: cytoscape.EdgeSingular) =>
+          `${oklch(0.68, 0.11, ele.data('sh') as number)} ${oklch(0.68, 0.11, ele.data('th') as number)}`,
+        'target-arrow-color': (ele: cytoscape.EdgeSingular) =>
+          oklch(0.74, 0.12, ele.data('th') as number),
+        opacity: 0.75,
+      } as unknown as cytoscape.Css.Edge,
     },
     {
       selector: 'edge:selected',
-      style: { 'line-color': '#e8e6df', 'target-arrow-color': '#e8e6df', opacity: 1 },
+      style: {
+        'line-fill': 'solid',
+        'line-color': '#e8e6df',
+        'target-arrow-color': '#e8e6df',
+        opacity: 1,
+      } as unknown as cytoscape.Css.Edge,
     },
   ];
 }
@@ -187,6 +199,7 @@ export function GraphView({ view, selected, focus, onSelect, onToggle }: Props) 
           : { group: 'nodes' as const, data };
       }),
     );
+    const hueById = new Map(view.nodes.map((n) => [n.id, n.domainHue]));
     cy.add(
       view.edges.map((e) => ({
         group: 'edges' as const,
@@ -196,6 +209,8 @@ export function GraphView({ view, selected, focus, onSelect, onToggle }: Props) 
           target: e.target,
           w: Math.min(3, 0.7 + 0.55 * Math.log2(1 + e.calls + e.imports)),
           runtime: e.runtime,
+          sh: hueById.get(e.source) ?? 0,
+          th: hueById.get(e.target) ?? 0,
         },
       })),
     );

@@ -10,21 +10,28 @@ import { Search } from './Search.tsx';
 const SOFT_CAP = 1500;
 
 function Legend() {
-  const stroke = '#a9b0bc';
   return (
     <div className="legend">
       <span className="item">
         <svg width="26" height="6">
-          <line x1="0" y1="3" x2="26" y2="3" stroke={stroke} strokeWidth="2" />
+          <defs>
+            <linearGradient id="legend-edge" x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0" stopColor="#4fae9c" />
+              <stop offset="1" stopColor="#c2913f" />
+            </linearGradient>
+          </defs>
+          <line x1="0" y1="3" x2="26" y2="3" stroke="url(#legend-edge)" strokeWidth="2" />
         </svg>
         observed under test
       </span>
       <span className="item">
         <svg width="26" height="6">
-          <line x1="0" y1="3" x2="26" y2="3" stroke="#6a707c" strokeWidth="1.5" strokeDasharray="4 4" />
+          <line x1="0" y1="3" x2="26" y2="3" stroke="#6a707c" strokeWidth="1.5" strokeDasharray="2 5" />
         </svg>
         static only
       </span>
+      <span className="item">edge fades source → target</span>
+      <span className="item">hue = domain family</span>
       <span className="item">◆ domain</span>
       <span className="item">▤ file</span>
       <span className="item">● function</span>

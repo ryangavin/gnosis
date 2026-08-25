@@ -7,6 +7,7 @@
  * Pure and unit-tested — the cytoscape layer just renders the result.
  */
 import type { GraphArtifact, GNode } from '../../src/graph/schema.ts';
+import { familyHue, subdomainHue } from './color.ts';
 
 export interface VisibleNode {
   id: string;
@@ -69,9 +70,17 @@ export function deriveView(
     return false;
   };
 
+  // Hue = family: golden-angle bases per top domain, subdomains nudged a
+  // few degrees around their family so related reads related.
   const domainHues = new Map<string, number>();
   const topDomains = (childrenOf.get('repo') ?? []).filter((n) => n.kind === 'domain');
-  topDomains.forEach((d, i) => domainHues.set(d.id, (i * 47) % 360));
+  topDomains.forEach((d, i) => domainHues.set(d.id, familyHue(i)));
+  for (const top of topDomains) {
+    const subs = (childrenOf.get(top.id) ?? []).filter((c) => c.kind === 'domain');
+    subs.forEach((sub, j) =>
+      domainHues.set(sub.id, subdomainHue(domainHues.get(top.id)!, j, subs.length)),
+    );
+  }
 
   const hueFor = (node: GNode): number => {
     let current: GNode | undefined = node;
