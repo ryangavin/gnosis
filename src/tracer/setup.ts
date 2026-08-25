@@ -1,27 +1,43 @@
 /**
- * Vitest setup file appended to the target's config by the shim.
- *
- * SPIKE VERSION: proves that a setup file living inside gnosis binds to the
- * running vitest instance (hooks actually fire in worker processes) and that
- * test attribution context is reachable.
+ * Vitest setup file appended to the target's config by the shim. Runs once
+ * per worker process, before any test module loads: installs the collector
+ * globals the instrumented code calls, records test attribution via
+ * vitest's own hooks, and flushes aggregates per finished test file plus at
+ * process exit. flush() resets the aggregates, so the appended NDJSON lines
+ * are increments that merge simply sums.
  */
-import { appendFileSync } from 'node:fs';
-import { join } from 'node:path';
-import { beforeEach } from 'vitest';
+import { appendFileSync, mkdirSync } from 'node:fs';
+import { join, relative, sep } from 'node:path';
+import { afterAll, beforeEach } from 'vitest';
+import { createCollector } from './runtime.ts';
 
 const outDir = process.env.GNOSIS_OUT_DIR!;
-let count = 0;
+const targetRoot = process.env.GNOSIS_TARGET_ROOT!;
+mkdirSync(outDir, { recursive: true });
+
+const collector = createCollector();
+const g = globalThis as unknown as {
+  __gnosisEnter?: (id: string) => void;
+  __gnosisExit?: () => void;
+};
+g.__gnosisEnter = collector.enter;
+g.__gnosisExit = collector.exit;
+
+const outPath = join(outDir, `trace-${process.pid}.ndjson`);
+const flush = (): void => {
+  const lines = collector.flush();
+  if (lines.length > 0) {
+    appendFileSync(outPath, lines.map((l) => JSON.stringify(l)).join('\n') + '\n');
+  }
+};
 
 beforeEach((ctx) => {
-  count += 1;
-  if (count <= 2) {
-    appendFileSync(
-      join(outDir, `setup-${process.pid}.log`),
-      `hook fired: test=${JSON.stringify(ctx.task.name)} file=${ctx.task.file?.filepath ?? '?'}\n`,
-    );
-  }
+  const filepath = ctx.task.file?.filepath;
+  collector.setCurrentTest(
+    ctx.task.name,
+    filepath ? relative(targetRoot, filepath).split(sep).join('/') : '',
+  );
 });
 
-process.on('exit', () => {
-  appendFileSync(join(outDir, `setup-${process.pid}.log`), `total hooks: ${count}\n`);
-});
+afterAll(flush);
+process.on('exit', flush);

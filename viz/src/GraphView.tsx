@@ -207,10 +207,10 @@ export function GraphView({ view, selected, onSelect, onToggle }: Props) {
       nestingFactor: 0.15,
     } as cytoscape.LayoutOptions);
     layout.one('layoutstop', () => {
-      cy.animate({ fit: { eles: cy.elements(), padding: 40 } }, { duration: 200 });
+      if (shouldFit) cy.fit(undefined, 40);
+      else cy.animate({ fit: { eles: cy.elements(), padding: 40 } }, { duration: 200 });
     });
     layout.run();
-    if (shouldFit) cy.fit(undefined, 40);
     firstLayout.current = false;
   }, [view]);
 
