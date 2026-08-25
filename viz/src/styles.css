@@ -90,18 +90,75 @@ body {
   inset: 0;
 }
 
-.cap-warning {
+.labels {
   position: absolute;
-  top: 10px;
-  left: 50%;
-  transform: translateX(-50%);
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.cluster-label {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: auto;
+  background: rgba(15, 17, 21, 0.55);
+  border: none;
+  border-radius: 999px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  opacity: 0;
+  transition: opacity 0.3s;
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.9);
+  padding: 2px 10px;
+  z-index: 3;
+}
+
+.cluster-label:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.tooltip {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  white-space: nowrap;
+  background: var(--panel-raised);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  padding: 4px 8px;
+  font-size: 11px;
+  z-index: 4;
+}
+
+.tooltip .ctx {
+  color: var(--ink-dim);
+  font-size: 10px;
+}
+
+.topbtn {
   background: var(--panel-raised);
   border: 1px solid var(--line);
   color: var(--ink-dim);
-  padding: 4px 12px;
-  border-radius: 3px;
+  font: inherit;
   font-size: 11px;
-  z-index: 5;
+  padding: 3px 10px;
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.topbtn:hover {
+  border-color: var(--ink-dim);
+  color: var(--ink);
 }
 
 .inspector {

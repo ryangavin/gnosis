@@ -4,8 +4,8 @@ A self-maintaining knowledge graph for codebases. Point it at a repo and it
 builds a graph of domains, files, functions, and call edges; layers the
 repo's own documentation onto the nodes; runs the repo's test suite with
 every function instrumented to mark which parts of the graph *actually
-execute*; and serves the result three ways — an interactive two-layer
-visualization for humans, an MCP server for agents, and emitted markdown
+execute*; and serves the result three ways — an interactive force-directed
+galaxy for humans, an MCP server for agents, and emitted markdown
 architecture docs.
 
 The goal: understand the architecture of a project you have seen zero lines
@@ -91,13 +91,21 @@ domains (`domains:`), remap nothing yet, and exclude files from tracing
 
 ## Reading the visualization
 
-Domains render collapsed by default with cross-domain edges aggregated —
-width is call volume, solid means observed under a test run, dashed means
-static analysis only. Double-click opens a domain into files, a file into
-functions; filled function dots were observed, outlined ones were not.
-Color always means domain identity, nothing else. The inspector shows the
-selected node's docs and its in/out edges; search reveals and centers
-anything.
+The viz is a single force-directed galaxy rendered by
+[cosmos.gl](https://github.com/cosmosgl/graph) — every file a square,
+every function a dot, React components diamonds — with the layout emerging
+from GPU physics: containment springs hold a file's functions around it,
+cluster forces gather each top-level domain into its own labeled
+constellation, repulsion does the rest. Color always means domain
+identity, nothing else. Bright points ran under the test suite, dim ones
+are static-only; solid links were observed under tests (width is call
+volume), dashed links are static-only calls, dotted links are imports.
+
+Click a point for its documentation and edges in the inspector; click a
+domain label to light its constellation; search reveals and flies to
+anything. Drag sculpts the layout, and positions persist per browser in
+localStorage — `reset layout` reseeds and re-simulates, `settle`/`pause`
+control the simulation, `fit` reframes the camera.
 
 ## Honest limitations
 

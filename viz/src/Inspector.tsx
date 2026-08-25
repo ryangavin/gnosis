@@ -4,9 +4,7 @@ import type { GraphIndexes } from '../../src/graph/indexes.ts';
 interface Props {
   indexes: GraphIndexes;
   selected?: string;
-  expanded: Set<string>;
   onReveal: (id: string) => void;
-  onToggle: (id: string) => void;
 }
 
 function shortName(indexes: GraphIndexes, id: string): { name: string; ctx: string } {
@@ -76,15 +74,16 @@ function Overview({ indexes, onReveal }: { indexes: GraphIndexes; onReveal: (id:
       ))}
       <p className="section-label">how to read this</p>
       <p className="empty">
-        Double-click a domain to open it into files, a file into functions. Solid edges were
-        observed during a test run; dashed edges are static analysis only. Click anything for
-        its documentation.
+        Every square is a file and every dot a function, pulled into domain constellations by
+        force. Bright points ran under the test suite; solid links were observed, dashed ones
+        are static analysis only, dotted ones are imports. Click anything for its
+        documentation; drag points to sculpt — the layout is saved in this browser.
       </p>
     </div>
   );
 }
 
-export function Inspector({ indexes, selected, expanded, onReveal, onToggle }: Props) {
+export function Inspector({ indexes, selected, onReveal }: Props) {
   const node = selected ? indexes.byId.get(selected) : undefined;
   if (!node) return <div className="inspector">{<Overview indexes={indexes} onReveal={onReveal} />}</div>;
 
@@ -149,13 +148,6 @@ export function Inspector({ indexes, selected, expanded, onReveal, onToggle }: P
           <div className="excerpt">{d.excerpt}</div>
         </div>
       ))}
-      {children.length > 0 && (
-        <div className="actions">
-          <button onClick={() => onToggle(node.id)}>
-            {expanded.has(node.id) ? 'collapse' : 'expand'}
-          </button>
-        </div>
-      )}
       {out.ids.length > 0 && (
         <>
           <p className="section-label">calls / imports →</p>

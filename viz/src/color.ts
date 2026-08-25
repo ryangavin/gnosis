@@ -5,8 +5,8 @@
  * family hue: related reads as related, siblings still tell apart.
  * Lightness carries the other axis: observed-under-test glows, static-only
  * stays ember. Colors are computed in OKLCH so every family sits at the
- * same perceived lightness, then converted to hex because cytoscape's
- * parser predates modern color syntax.
+ * same perceived lightness, then converted to sRGB — tuples for the WebGL
+ * attribute arrays, hex for CSS.
  */
 
 export const GOLDEN_ANGLE = 137.508;
@@ -20,7 +20,8 @@ export function subdomainHue(base: number, index: number, count: number): number
   return (((base + offset) % 360) + 360) % 360;
 }
 
-export function oklch(l: number, c: number, hDeg: number): string {
+/** OKLCH → gamma-encoded sRGB, each channel clamped to [0, 1]. */
+export function oklchToRgb(l: number, c: number, hDeg: number): [number, number, number] {
   const h = (hDeg * Math.PI) / 180;
   const a = c * Math.cos(h);
   const b = c * Math.sin(h);
@@ -38,9 +39,15 @@ export function oklch(l: number, c: number, hDeg: number): string {
 
   const gamma = (x: number): number =>
     x <= 0.0031308 ? 12.92 * x : 1.055 * Math.pow(Math.max(x, 0), 1 / 2.4) - 0.055;
+  const clamp = (x: number): number => Math.max(0, Math.min(1, gamma(x)));
+  return [clamp(r), clamp(g), clamp(bl)];
+}
+
+export function oklch(l: number, c: number, hDeg: number): string {
   const channel = (x: number): string =>
-    Math.max(0, Math.min(255, Math.round(gamma(x) * 255)))
+    Math.round(x * 255)
       .toString(16)
       .padStart(2, '0');
-  return `#${channel(r)}${channel(g)}${channel(bl)}`;
+  const [r, g, b] = oklchToRgb(l, c, hDeg);
+  return `#${channel(r)}${channel(g)}${channel(b)}`;
 }
