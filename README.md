@@ -15,15 +15,48 @@ of, in minutes.
 
 ```
 npm install
-node bin/gnosis.ts scan  <repo>    # static analysis → graph.json
-node bin/gnosis.ts trace <repo>    # run the repo's tests instrumented; overlay observations
-node bin/gnosis.ts serve <repo>    # open http://localhost:4400
-node bin/gnosis.ts emit  <repo>    # markdown architecture docs
-node bin/gnosis.ts mcp   <repo>    # MCP server over stdio, for agent configs
+node bin/gnosis.ts scan   <repo>    # static analysis → graph.json
+node bin/gnosis.ts trace  <repo>    # run the repo's tests instrumented; overlay observations
+node bin/gnosis.ts serve  <repo>    # open http://localhost:4400
+node bin/gnosis.ts export <repo>    # static site (viz + graph.json) for any static host
+node bin/gnosis.ts emit   <repo>    # markdown architecture docs
+node bin/gnosis.ts mcp    <repo>    # MCP server over stdio, for agent configs
 ```
 
 No build step — Node ≥ 24 runs the TypeScript directly. All state lives in
 `~/.gnosis/<repo>-<hash>/`; the target repo is never written to.
+
+## Installing into another repo
+
+gnosis is also an installable package, so a repo can build its own graph as
+part of its test pipeline:
+
+```
+npm install -D github:ryangavin/gnosis
+```
+
+```jsonc
+// package.json of the target repo
+"scripts": {
+  "graph": "gnosis scan . && gnosis trace .",
+  "graph:serve": "gnosis serve .",
+  "posttest": "npm run graph"
+}
+```
+
+Installed this way, `prepare` compiles bin+src to `dist/` — Node refuses to
+type-strip `.ts` under `node_modules`, so the installed artifact is plain JS
+while the checkout keeps running source directly. The CLI is identical; the
+target repo is still never written to.
+
+For CI, `gnosis export <repo> --out _site` emits the visualization as a
+fully static site (relative asset paths, the graph served as `./graph.json`)
+that deploys to GitHub Pages or any static host — the graph rebuilds on
+every push, traced against that commit's own test run.
+
+There is a programmatic surface too: `import { loadGraph, contextOf,
+overview } from 'gnosis'` gives you the same query layer the MCP server and
+markdown emitter are built on.
 
 ## How the graph is made
 

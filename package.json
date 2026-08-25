@@ -8,15 +8,30 @@
     "node": ">=24"
   },
   "bin": {
-    "gnosis": "bin/gnosis.ts"
+    "gnosis": "dist/bin/gnosis.js"
   },
+  "main": "dist/src/index.js",
+  "exports": {
+    ".": {
+      "types": "./dist/src/index.d.ts",
+      "default": "./dist/src/index.js"
+    }
+  },
+  "files": [
+    "bin",
+    "dist",
+    "src",
+    "viz"
+  ],
   "scripts": {
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.viz.json",
-    "gnosis": "node --disable-warning=ExperimentalWarning bin/gnosis.ts"
+    "gnosis": "node --disable-warning=ExperimentalWarning bin/gnosis.ts",
+    "prepare": "tsc -p tsconfig.build.json"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",
+    "@vitejs/plugin-react": "^4.3.4",
     "cytoscape": "^3.30.4",
     "cytoscape-fcose": "^2.2.0",
     "magic-string": "^0.30.17",
@@ -33,7 +48,6 @@
     "@types/node": "^22.10.2",
     "@types/react": "^19.0.2",
     "@types/react-dom": "^19.0.2",
-    "@vitejs/plugin-react": "^4.3.4",
     "vitest": "^2.1.8"
   }
 }

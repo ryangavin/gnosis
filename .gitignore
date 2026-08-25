@@ -1,3 +1,4 @@
 node_modules/
+# the prepare-time compile for installed consumers; the checkout runs src directly
 dist/
 *.log

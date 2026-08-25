@@ -1,0 +1,16 @@
+{
+  // The installed-package build. Node refuses to type-strip .ts under
+  // node_modules, so `prepare` compiles bin+src to dist/ — the checkout
+  // itself never needs this. rewriteRelativeImportExtensions turns the
+  // source's `./x.ts` imports into `./x.js` in the emit.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "outDir": "dist",
+    "rootDir": ".",
+    "rewriteRelativeImportExtensions": true,
+    "declaration": true,
+    "sourceMap": true
+  },
+  "exclude": ["**/*.test.ts"]
+}

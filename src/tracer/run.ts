@@ -7,8 +7,8 @@
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import type { GnosisConfig } from '../config.ts';
+import { ownSibling } from '../paths.ts';
 
 export interface RunCounts {
   passed: number;
@@ -94,7 +94,7 @@ export function traceTarget(
   const baseline = runVitest(targetRoot, join(traceDir, 'baseline.json'), [], {});
 
   process.stdout.write('instrumented run…\n');
-  const shim = fileURLToPath(new URL('./shim.vitest.config.ts', import.meta.url));
+  const shim = ownSibling(import.meta.url, 'shim.vitest.config');
   const instrumented = runVitest(targetRoot, join(traceDir, 'run.json'), ['--config', shim], {
     GNOSIS_TARGET_ROOT: targetRoot,
     GNOSIS_TARGET_CONFIG: targetConfig,

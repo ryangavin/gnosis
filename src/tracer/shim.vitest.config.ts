@@ -14,7 +14,9 @@
  * appended, and vite's cache is redirected so the target tree is never touched.
  */
 import { join } from 'node:path';
-import { pathToFileURL, fileURLToPath } from 'node:url';
+import { pathToFileURL } from 'node:url';
+import { ownSibling } from '../paths.ts';
+import { gnosisTracePlugin } from './plugin.ts';
 
 function required(name: string): string {
   const value = process.env[name];
@@ -38,8 +40,6 @@ export default async () => {
       ? await mod.default({ mode: 'test', command: 'serve' })
       : await mod.default;
 
-  const { gnosisTracePlugin } = await import('./plugin.ts');
-
   return {
     ...base,
     root: targetRoot,
@@ -49,7 +49,7 @@ export default async () => {
       ...base.test,
       setupFiles: [
         ...toArray<string>(base.test?.setupFiles),
-        fileURLToPath(new URL('./setup.ts', import.meta.url)),
+        ownSibling(import.meta.url, 'setup'),
       ],
     },
   };

@@ -7,6 +7,7 @@ usage:
   gnosis scan  <repo>                    static analysis → graph.json
   gnosis trace <repo> [-- vitest args]   run the target's tests instrumented; overlay the graph
   gnosis serve <repo> [--port 4400]      interactive two-layer visualization
+  gnosis export <repo> [--out <dir>]     static site (viz + graph.json) for publishing
   gnosis mcp   <repo>                    MCP server over stdio
   gnosis emit  <repo> [--out <dir>]      markdown architecture summaries
 `;
@@ -25,6 +26,10 @@ export async function main(argv: string[]): Promise<void> {
     case 'serve': {
       const { runServe } = await import('./commands/serve.ts');
       return runServe(rest);
+    }
+    case 'export': {
+      const { runExport } = await import('./commands/export.ts');
+      return runExport(rest);
     }
     case 'mcp': {
       const { runMcp } = await import('./commands/mcp.ts');

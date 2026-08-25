@@ -47,7 +47,7 @@ export function App() {
   const [state, dispatch] = useReducer(reduce, initialState);
 
   useEffect(() => {
-    fetch('/api/graph')
+    fetch('graph.json')
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`${r.status}`))))
       .then((g: GraphArtifact) => setGraph(g))
       .catch((e: Error) => setError(`could not load the graph: ${e.message}`));
