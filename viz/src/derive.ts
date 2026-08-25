@@ -106,23 +106,38 @@ export function deriveView(
   };
   for (const domain of childrenOf.get('repo') ?? []) walk(domain, undefined);
 
-  // Deepest visible ancestor per underlying endpoint.
+  // Deepest visible ancestor per underlying endpoint. A hidden endpoint
+  // (a test file while tests are off) drops its edges entirely — climbing
+  // past it would pin edges onto the enclosing compound as arcs.
   const repCache = new Map<string, string | undefined>();
   const representative = (id: string): string | undefined => {
     if (repCache.has(id)) return repCache.get(id);
     const chain: string[] = [];
     let current = byId.get(id);
+    let dropped = false;
     while (current && current.id !== 'repo') {
+      if (hidden(current)) dropped = true;
       chain.push(current.id);
       current = current.parent ? byId.get(current.parent) : undefined;
     }
     let rep: string | undefined;
-    for (let i = chain.length - 1; i >= 0; i -= 1) {
-      if (visible.has(chain[i]!)) rep = chain[i]!;
-      else break;
+    if (!dropped) {
+      for (let i = chain.length - 1; i >= 0; i -= 1) {
+        if (visible.has(chain[i]!)) rep = chain[i]!;
+        else break;
+      }
     }
     repCache.set(id, rep);
     return rep;
+  };
+
+  const isAncestorOf = (maybeAncestor: string, id: string): boolean => {
+    let current = byId.get(id);
+    while (current?.parent) {
+      if (current.parent === maybeAncestor) return true;
+      current = byId.get(current.parent);
+    }
+    return false;
   };
 
   const edgeMap = new Map<string, VisibleEdge>();
@@ -130,6 +145,7 @@ export function deriveView(
     const source = representative(edge.from);
     const target = representative(edge.to);
     if (!source || !target || source === target) continue;
+    if (isAncestorOf(source, target) || isAncestorOf(target, source)) continue;
     const key = `${source}→${target}`;
     let agg = edgeMap.get(key);
     if (!agg) {

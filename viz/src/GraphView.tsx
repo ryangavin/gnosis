@@ -8,6 +8,8 @@ cytoscape.use(fcose);
 interface Props {
   view: DerivedView;
   selected?: string;
+  /** Fit the camera to this node's neighborhood after the next relayout. */
+  focus?: string;
   onSelect: (id?: string) => void;
   onToggle: (id: string) => void;
 }
@@ -48,6 +50,7 @@ function buildStyle(): cytoscape.StylesheetJson {
         width: 'data(nw)',
         height: 22,
         'font-size': 10,
+        'min-zoomed-font-size': 7,
         'text-valign': 'center',
         'text-halign': 'center',
         'background-color': (ele: cytoscape.NodeSingular) => hsl(ele.data('hue'), 22, 14),
@@ -61,6 +64,7 @@ function buildStyle(): cytoscape.StylesheetJson {
         width: 14,
         height: 14,
         'font-size': 9,
+        'min-zoomed-font-size': 7,
         'text-valign': 'bottom',
         'text-halign': 'center',
         'text-margin-y': 3,
@@ -89,7 +93,7 @@ function buildStyle(): cytoscape.StylesheetJson {
         'text-halign': 'center',
         'text-margin-y': -4,
         'font-size': 11,
-        padding: '18px',
+        padding: '30px',
         shape: 'round-rectangle',
       },
     },
@@ -108,10 +112,10 @@ function buildStyle(): cytoscape.StylesheetJson {
         'line-color': '#6a707c',
         'target-arrow-color': '#6a707c',
         'target-arrow-shape': 'triangle',
-        'arrow-scale': 0.7,
+        'arrow-scale': 0.55,
         'line-style': 'dashed',
-        'line-dash-pattern': [4, 4],
-        opacity: 0.4,
+        'line-dash-pattern': [2, 5],
+        opacity: 0.28,
       },
     },
     {
@@ -120,7 +124,7 @@ function buildStyle(): cytoscape.StylesheetJson {
         'line-style': 'solid',
         'line-color': '#a9b0bc',
         'target-arrow-color': '#a9b0bc',
-        opacity: 0.75,
+        opacity: 0.65,
       },
     },
     {
@@ -130,12 +134,14 @@ function buildStyle(): cytoscape.StylesheetJson {
   ];
 }
 
-export function GraphView({ view, selected, onSelect, onToggle }: Props) {
+export function GraphView({ view, selected, focus, onSelect, onToggle }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const cyRef = useRef<cytoscape.Core>(null);
   const firstLayout = useRef(true);
   const callbacks = useRef({ onSelect, onToggle });
   callbacks.current = { onSelect, onToggle };
+  const focusRef = useRef(focus);
+  focusRef.current = focus;
 
   useEffect(() => {
     const cy = cytoscape({
@@ -188,29 +194,45 @@ export function GraphView({ view, selected, onSelect, onToggle }: Props) {
           id: e.id,
           source: e.source,
           target: e.target,
-          w: Math.min(7, 1 + 1.3 * Math.log2(1 + e.calls + e.imports)),
+          w: Math.min(3, 0.7 + 0.55 * Math.log2(1 + e.calls + e.imports)),
           runtime: e.runtime,
         },
       })),
     );
 
-    const shouldFit = firstLayout.current;
+    // fcose with animate:true never emits layoutstop, so positions are
+    // computed synchronously and the camera provides the motion instead.
     const layout = cy.layout({
       name: 'fcose',
-      animate: !firstLayout.current,
-      animationDuration: 350,
+      animate: false,
       randomize: firstLayout.current,
       fit: false,
-      quality: 'default',
-      nodeRepulsion: 6500,
-      idealEdgeLength: 110,
-      nestingFactor: 0.15,
+      quality: 'proof',
+      nodeRepulsion: 30000,
+      idealEdgeLength: 170,
+      nodeSeparation: 140,
+      nestingFactor: 0.6,
+      gravity: 0.08,
+      gravityCompound: 0.6,
+      tile: true,
+      tilingPaddingVertical: 40,
+      tilingPaddingHorizontal: 40,
     } as cytoscape.LayoutOptions);
-    layout.one('layoutstop', () => {
-      if (shouldFit) cy.fit(undefined, 40);
-      else cy.animate({ fit: { eles: cy.elements(), padding: 40 } }, { duration: 200 });
-    });
     layout.run();
+
+    // The fit is instant, never animated: an occluded window gets no rAF
+    // ticks, and a camera move that depends on animation frames silently
+    // never lands there.
+    if (firstLayout.current) {
+      cy.fit(undefined, 40);
+    } else {
+      const focusNode = focusRef.current ? cy.getElementById(focusRef.current) : undefined;
+      const region =
+        focusNode && focusNode.nonempty()
+          ? focusNode.closedNeighborhood().union(focusNode.descendants())
+          : cy.elements();
+      cy.fit(region, 60);
+    }
     firstLayout.current = false;
   }, [view]);
 

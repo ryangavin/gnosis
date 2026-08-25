@@ -86,6 +86,7 @@ export function App() {
         <GraphView
           view={view}
           selected={state.selected}
+          focus={state.focus}
           onSelect={(id) => dispatch({ type: 'select', id })}
           onToggle={(id) => dispatch({ type: 'toggle', id })}
         />
