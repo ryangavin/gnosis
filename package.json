@@ -1,9 +1,15 @@
 {
   "name": "gnosis",
   "version": "0.1.0",
-  "private": true,
   "type": "module",
   "description": "A self-maintaining knowledge graph for codebases: files, functions, calls, docs, domains.",
+  "license": "MIT",
+  "author": "Ryan Gavin",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ryangavin/gnosis.git"
+  },
+  "homepage": "https://github.com/ryangavin/gnosis#readme",
   "engines": {
     "node": ">=24"
   },
