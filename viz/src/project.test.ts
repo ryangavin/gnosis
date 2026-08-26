@@ -55,6 +55,13 @@ describe('project', () => {
     expect(p.domains.map((d) => d.name)).toEqual(['core', 'ui']);
   });
 
+  it('pins one anchor per domain, spread apart on the ring', () => {
+    const p = project(fixture(), { showTests: false });
+    expect(p.clusterPositions.length).toBe(p.domains.length * 2);
+    const [ax, ay, bx, by] = p.clusterPositions as [number, number, number, number];
+    expect(Math.hypot(ax - bx, ay - by)).toBeGreaterThan(1000);
+  });
+
   it('an edge with a hidden endpoint is dropped entirely', () => {
     const p = project(fixture(), { showTests: false });
     // containment (3 visible fns) + observed call + static call + import

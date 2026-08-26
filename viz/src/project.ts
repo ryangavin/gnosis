@@ -47,6 +47,8 @@ export interface Projection {
   shapes: Float32Array;
   clusters: (number | undefined)[];
   clusterStrength: Float32Array;
+  /** Pinned anchor per cluster (x,y pairs) — the ring the constellations hold. */
+  clusterPositions: number[];
   links: Float32Array;
   linkColors: Float32Array;
   linkWidths: Float32Array;
@@ -143,12 +145,15 @@ export function project(graph: GraphArtifact, options: ProjectOptions): Projecti
   const clusterStrength = new Float32Array(count);
 
   const center = SPACE_SIZE / 2;
-  const ring = SPACE_SIZE * 0.32;
+  const ring = SPACE_SIZE * 0.24;
   const anchorOf = (cluster: number | undefined): [number, number] => {
     if (cluster === undefined || topDomains.length === 0) return [center, center];
     const angle = (cluster / topDomains.length) * Math.PI * 2;
     return [center + ring * Math.cos(angle), center + ring * Math.sin(angle)];
   };
+
+  const clusterPositions: number[] = [];
+  topDomains.forEach((_, i) => clusterPositions.push(...anchorOf(i)));
 
   const fileSeed = new Map<string, [number, number]>();
   points.forEach((node, i) => {
@@ -177,15 +182,15 @@ export function project(graph: GraphArtifact, options: ProjectOptions): Projecti
     if (node.kind === 'file') {
       rgb = oklchToRgb(0.62, 0.09, hue);
       alpha = 0.85;
-      sizes[i] = 5 + Math.min(7, Math.sqrt(node.stats?.functions ?? (childrenOf.get(node.id)?.length ?? 0)) * 1.6);
+      sizes[i] = 6 + Math.min(8, Math.sqrt(node.stats?.functions ?? (childrenOf.get(node.id)?.length ?? 0)) * 1.8);
       shapes[i] = SHAPE_SQUARE;
-      clusterStrength[i] = 1;
+      clusterStrength[i] = 0.8;
     } else {
       rgb = observed ? oklchToRgb(0.8, 0.14, hue) : oklchToRgb(0.52, 0.08, hue);
       alpha = observed ? 1 : 0.6;
-      sizes[i] = 2.5 + Math.min(5, Math.sqrt(degree.get(node.id) ?? 0) * 0.7);
+      sizes[i] = 3 + Math.min(6, Math.sqrt(degree.get(node.id) ?? 0) * 0.8);
       shapes[i] = node.flags?.reactComponent ? SHAPE_DIAMOND : SHAPE_CIRCLE;
-      clusterStrength[i] = 0.55;
+      clusterStrength[i] = 0.4;
     }
     colors[i * 4] = rgb[0];
     colors[i * 4 + 1] = rgb[1];
@@ -272,6 +277,7 @@ export function project(graph: GraphArtifact, options: ProjectOptions): Projecti
     shapes,
     clusters,
     clusterStrength,
+    clusterPositions,
     links: new Float32Array(linkPairs),
     linkColors: new Float32Array(linkColors),
     linkWidths: new Float32Array(linkWidths),

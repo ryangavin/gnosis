@@ -95,7 +95,9 @@ export const CosmosView = forwardRef<CosmosHandle, Props>(function CosmosView(
       fitViewOnInit: false,
       randomSeed: 'gnosis',
       enableDrag: true,
-      scalePointsOnZoom: true,
+      // Constant screen-size points: at galaxy zoom the stars stay stars
+      // instead of shrinking into dust with the camera.
+      scalePointsOnZoom: false,
       renderHoveredPointRing: true,
       hoveredPointRingColor: '#e8e6df',
       focusedPointRingColor: '#ffffff',
@@ -106,15 +108,19 @@ export const CosmosView = forwardRef<CosmosHandle, Props>(function CosmosView(
       linkDashLength: 5,
       linkDashGap: 4,
       curvedLinks: true,
-      simulationDecay: 4000,
-      simulationGravity: 0.08,
-      simulationCenter: 0.05,
-      simulationRepulsion: 2.5,
+      // Constellations, not hairballs: cluster anchors are pinned to the
+      // seed ring (setClusterPositions below), so the cluster force only
+      // holds identity — repulsion is what gives a big domain its area.
+      // Gravity stays tiny, just enough to keep unclustered strays in frame.
+      simulationDecay: 5000,
+      simulationGravity: 0.05,
+      simulationCenter: 0,
+      simulationRepulsion: 3,
       simulationRepulsionTheta: 1.7,
-      simulationLinkSpring: 0.3,
-      simulationLinkDistance: 10,
+      simulationLinkSpring: 0.2,
+      simulationLinkDistance: 15,
       simulationFriction: 0.85,
-      simulationCluster: 0.45,
+      simulationCluster: 0.35,
       onPointClick: (index) => live.current.onSelect(live.current.projection.ids[index]),
       onBackgroundClick: () => live.current.onSelect(undefined),
       onPointMouseOver: (index, pointPosition) => {
@@ -136,7 +142,7 @@ export const CosmosView = forwardRef<CosmosHandle, Props>(function CosmosView(
       onSimulationTick: () => {
         if (!followArmed.current) return;
         const now = Date.now();
-        if (followUntil.current === 0) followUntil.current = now + 4500;
+        if (followUntil.current === 0) followUntil.current = now + 5500;
         if (userZoomed.current || now >= followUntil.current) {
           followArmed.current = false;
           return;
@@ -157,6 +163,10 @@ export const CosmosView = forwardRef<CosmosHandle, Props>(function CosmosView(
       onSimulationEnd: () => {
         live.current.onRunningChange(false);
         scheduleSave();
+        // The follow window closes before the decay tail does; one last fit
+        // frames wherever the expansion actually came to rest — unless the
+        // camera is already the user's.
+        if (!userZoomed.current) graphRef.current?.fitView(600);
       },
     });
     graphRef.current = g;
@@ -195,6 +205,7 @@ export const CosmosView = forwardRef<CosmosHandle, Props>(function CosmosView(
     g.setPointShapes(projection.shapes);
     g.setPointClusters(projection.clusters);
     g.setPointClusterStrength(projection.clusterStrength);
+    g.setClusterPositions(projection.clusterPositions);
     g.setLinks(projection.links);
     g.setLinkColors(projection.linkColors);
     g.setLinkWidths(projection.linkWidths);

@@ -5,7 +5,10 @@
  * full, or blocked, and the viz must render identically without it.
  */
 
-const keyFor = (target: string): string => `gnosis:layout:${target}`;
+// v2: bump whenever the physics change enough that an old saved layout would
+// restore a shape the new forces can no longer produce — stale keys just age
+// out as garbage and the graph re-settles once.
+const keyFor = (target: string): string => `gnosis:layout:v2:${target}`;
 
 export function loadLayout(target: string): Map<string, [number, number]> | undefined {
   try {
