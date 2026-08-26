@@ -1,0 +1,172 @@
+:root {
+  color-scheme: dark;
+  --bg: #080b11;
+  --panel: #0d131c;
+  --line: #1b2534;
+  --ink: #c3cddb;
+  --dim: #5d6a7d;
+  --accent: #8fbcff;
+}
+* { box-sizing: border-box; }
+
+html, body, #root { height: 100%; margin: 0; }
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font: 13px/1.45 "IBM Plex Sans", ui-sans-serif, -apple-system, system-ui, sans-serif;
+  overflow: hidden;
+}
+
+/* ---- chrome ---------------------------------------------------------- */
+
+.topbar {
+  position: fixed; inset: 0 0 auto 0; z-index: 6;
+  display: flex; gap: 15px; align-items: baseline; flex-wrap: wrap;
+  padding: 9px 14px;
+  background: linear-gradient(var(--bg) 55%, #080b11cc 80%, transparent);
+}
+.topbar b { color: #e6edf6; }
+.topbar span { color: var(--dim); }
+.topbar em { color: var(--accent); font-style: normal; font-weight: 600; }
+.topbar .hint { margin-left: auto; }
+.topbar .busy em { color: #f0b866; }
+.topbar button {
+  background: #16202e; color: var(--ink); border: 1px solid var(--line);
+  border-radius: 6px; padding: 3px 10px; font: inherit; font-size: 12px; cursor: pointer;
+}
+.topbar button:hover { border-color: #33445c; color: #fff; }
+
+.legend {
+  position: fixed; left: 14px; bottom: 14px; z-index: 6;
+  display: flex; gap: 14px; align-items: center;
+  background: #0d131cdd; border: 1px solid var(--line); border-radius: 9px;
+  padding: 7px 12px; font-size: 11px; color: #7d8a9c;
+}
+.legend .swatch {
+  display: inline-block; width: 26px; height: 9px; border-radius: 2px;
+  vertical-align: -1px; margin-right: 6px;
+}
+.legend .grad { background: linear-gradient(90deg, hsl(210 48% 30%), hsl(210 78% 60%)); }
+.legend .dead { background: hsl(210 18% 21%); }
+.legend .rule-direct { height: 2px; background: hsl(210 85% 74%); }
+.legend .rule-incidental { height: 2px; background: hsl(210 85% 58%); opacity: 0.5; }
+
+.splash { display: grid; place-content: center; height: 100%; text-align: center; gap: 10px; }
+.splash h1 { font-size: 17px; font-weight: 500; color: #e6edf6; margin: 0; }
+.splash p { color: #d08a8a; margin: 0; }
+.splash code {
+  font: 12px "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  color: var(--dim); background: var(--panel); padding: 7px 11px; border-radius: 7px;
+}
+
+/* ---- nodes ----------------------------------------------------------- */
+
+.box {
+  width: 100%; height: 100%;
+  border: 1px solid; border-radius: 4px;
+  position: relative; overflow: hidden;
+  transition: box-shadow .12s, filter .12s;
+}
+.box.dimmed { opacity: .35; }
+.box.selected { box-shadow: 0 0 0 2px #fff inset; }
+.box .name { display: block; }
+/* A 9px glyph is not a click target. The arrow stays small; the hit area
+   around it does not, pulled back with negative margin so the layout is
+   unchanged. */
+.box .caret {
+  background: none; border: 0; color: currentColor; font: inherit;
+  font-size: 10px; line-height: 1; opacity: .55; cursor: pointer;
+  padding: 6px 7px; margin: -6px 0 -6px -5px;
+  border-radius: 5px; pointer-events: all; flex: none;
+}
+.box .caret:hover { opacity: 1; background: #ffffff1f; }
+
+.container { border-radius: 10px; }
+.container header {
+  display: flex; align-items: baseline; gap: 6px;
+  padding: 6px 10px 0; font-size: 12px; font-weight: 600;
+  letter-spacing: .01em; pointer-events: none;
+
+}
+.container.dir header { font-size: 11px; font-weight: 500; opacity: .85; }
+.container .breadth { font-size: 10.5px; opacity: .72; font-weight: 500; }
+.container:hover { filter: brightness(1.25); }
+
+.leaf {
+  display: flex; align-items: center; justify-content: center;
+  padding: 0 8px; font-size: 10.5px; color: #8b98ab; cursor: pointer;
+  text-align: center; line-height: 1.15;
+}
+.leaf.ran { color: #f4f7ff; }
+.leaf.fn { border-radius: 13px; }
+.leaf.react { border-style: dashed; }
+.leaf:hover { border-color: #fff !important; }
+
+/* Coverage: a rule along the bottom edge. */
+.rule {
+  position: absolute; left: 4px; right: 4px; bottom: 2px; height: 2px;
+  border-radius: 1px; background: #00000059; overflow: hidden;
+}
+.rule-fill { display: block; height: 100%; border-radius: 1px; opacity: .5; }
+.rule-fill.direct { opacity: .95; }
+
+.port { opacity: 0; pointer-events: none; }
+
+/* ---- inspector ------------------------------------------------------- */
+
+.inspector {
+  position: fixed; right: 12px; top: 52px; width: 330px; max-height: 76vh;
+  overflow: auto; z-index: 7;
+  background: #0d131cf7; border: 1px solid #1e2937; border-radius: 11px;
+  padding: 13px 15px; box-shadow: 0 14px 44px #000a;
+}
+.inspector .close {
+  position: absolute; right: 8px; top: 6px; background: none; border: 0;
+  color: var(--dim); font-size: 18px; line-height: 1; cursor: pointer; padding: 2px 5px;
+}
+.inspector .close:hover { color: #fff; }
+.inspector .kind {
+  color: var(--accent); font-size: 10.5px; text-transform: uppercase; letter-spacing: .08em;
+}
+.inspector h3 { margin: 2px 22px 0 0; font-size: 14px; color: #eef3fa; word-break: break-word; }
+.inspector h4 {
+  margin: 14px 0 0; font-size: 11px; font-weight: 600; color: var(--dim);
+  text-transform: uppercase; letter-spacing: .06em;
+}
+.inspector .summary { margin: 9px 0 0; color: #94a2b5; }
+.inspector .bar {
+  height: 5px; background: var(--line); border-radius: 3px; margin: 11px 0 3px; overflow: hidden;
+}
+.inspector .bar span {
+  display: block; height: 100%; background: linear-gradient(90deg, #3f7fd0, #7cc4ff);
+}
+.inspector .caption { font-size: 11px; color: var(--dim); }
+.inspector dl { margin: 11px 0 0; font-size: 12px; }
+.inspector dl > div { display: grid; grid-template-columns: 1fr auto; gap: 12px; padding: 2px 0; }
+.inspector dt { color: var(--dim); }
+.inspector dd { margin: 0; color: var(--ink); text-align: right; }
+.inspector ul { margin: 6px 0 0; padding: 0; list-style: none; }
+.inspector .plain li { color: #8b98ab; font-size: 11.5px; padding: 1px 0; }
+.inspector .links button {
+  background: none; border: 0; color: #a9b8cc; font: inherit; font-size: 11.5px;
+  padding: 2px 0; cursor: pointer; text-align: left; width: 100%;
+}
+.inspector .links button:hover { color: #fff; }
+.inspector .muted { color: var(--dim); }
+.inspector code {
+  display: block; margin-top: 11px; word-break: break-all;
+  font: 11px "IBM Plex Mono", ui-monospace, Menlo, monospace; color: var(--dim);
+}
+
+/* ---- react flow overrides -------------------------------------------- */
+
+.react-flow__node { font: inherit; }
+.react-flow__node-container { pointer-events: all; }
+.react-flow__attribution { background: transparent; color: #2b3646; }
+.react-flow__controls-button {
+  background: var(--panel); border-bottom: 1px solid var(--line); fill: var(--ink);
+}
+.react-flow__controls-button:hover { background: #16202e; }
+.react-flow__minimap {
+  background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+}

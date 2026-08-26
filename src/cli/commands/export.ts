@@ -37,7 +37,7 @@ export async function runExport(argv: string[]): Promise<void> {
   }
 
   await build({
-    root: join(packageRoot(), 'viz'),
+    root: join(packageRoot(), 'app'),
     configFile: false,
     base: './',
     plugins: [react()],

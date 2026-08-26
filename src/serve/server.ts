@@ -13,7 +13,7 @@ import { packageRoot } from '../paths.ts';
 export async function serveGraph(graphPath: string, port: number): Promise<void> {
   const gnosisRoot = packageRoot();
   const server = await createServer({
-    root: join(gnosisRoot, 'viz'),
+    root: join(gnosisRoot, 'app'),
     configFile: false,
     cacheDir: join(gnosisRoot, 'node_modules', '.vite-gnosis'),
     server: { port },
