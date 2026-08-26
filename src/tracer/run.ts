@@ -63,7 +63,9 @@ function runVitest(
     [
       'vitest',
       'run',
-      '--reporter=basic',
+      // `basic` was removed in vitest 3; `default` has existed throughout and
+      // streams the target's own output the same way.
+      '--reporter=default',
       '--reporter=json',
       `--outputFile=${jsonOut}`,
       ...extraArgs,
