@@ -16,7 +16,8 @@ of, in minutes.
 ```
 npm install
 node bin/gnosis.ts scan   <repo>    # static analysis → graph.json
-node bin/gnosis.ts trace  <repo>    # run the repo's tests instrumented; overlay observations
+node bin/gnosis.ts test   <repo>    # THE test run, instrumented once; overlay the graph, exit like vitest
+node bin/gnosis.ts trace  <repo>    # careful mode: baseline run, then instrumented, verified against it
 node bin/gnosis.ts serve  <repo>    # open http://localhost:4400
 node bin/gnosis.ts export <repo>    # static site (viz + graph.json) for any static host
 node bin/gnosis.ts emit   <repo>    # markdown architecture docs
@@ -35,12 +36,17 @@ part of its test pipeline:
 npm install -D github:ryangavin/gnosis
 ```
 
+gnosis is middleware, not a second pipeline: `gnosis test` runs the repo's
+vitest suite ONCE, instrumented — output streams through, the exit code is
+vitest's, and the graph overlay is read off that single run. Make it the
+test command and the graph is a free by-product of testing:
+
 ```jsonc
 // package.json of the target repo
 "scripts": {
-  "graph": "gnosis scan . && gnosis trace .",
-  "graph:serve": "gnosis serve .",
-  "posttest": "npm run graph"
+  "test": "gnosis scan . && gnosis test .",
+  "test:fast": "vitest run",          // plain vitest, for iteration
+  "graph:serve": "gnosis serve ."
 }
 ```
 
@@ -49,10 +55,12 @@ type-strip `.ts` under `node_modules`, so the installed artifact is plain JS
 while the checkout keeps running source directly. The CLI is identical; the
 target repo is still never written to.
 
-For CI, `gnosis export <repo> --out _site` emits the visualization as a
-fully static site (relative asset paths, the graph served as `./graph.json`)
-that deploys to GitHub Pages or any static host — the graph rebuilds on
-every push, traced against that commit's own test run.
+For CI, run `npm test` (which is now also the trace) and follow it with
+`gnosis export <repo> --out _site` — a fully static site (relative asset
+paths, the graph served as `./graph.json`) that deploys to GitHub Pages or
+any static host. The graph rebuilds on every push, traced against that
+commit's own single test run; the suite never runs twice for the graph's
+sake.
 
 There is a programmatic surface too: `import { loadGraph, contextOf,
 overview } from 'gnosis'` gives you the same query layer the MCP server and
@@ -72,16 +80,18 @@ elements resolve to their components, and workspace symlinks are realpath'd
 away. TSDoc, file headers, `docs/*.md` basename mirrors, and READMEs attach
 to the nodes they describe.
 
-**Runtime overlay.** `gnosis trace` runs the *target's own* vitest via a
-shim config that dynamically imports the target's config and prepends a
-vite plugin. The plugin wraps every named function body in
+**Runtime overlay.** `gnosis test` (and `gnosis trace`) run the *target's
+own* vitest via a shim config that dynamically imports the target's config
+and prepends a vite plugin. The plugin wraps every named function body in
 `enter/try/finally/exit` calls via magic-string, before esbuild strips
 types, so spans and IDs match the static walk by construction. A per-worker
 collector aggregates caller→callee edges with test attribution and flushes
 NDJSON; the merge attaches runtime facets to static edges, adds
 `static: false` edges for dynamic dispatch the checker could not see, and
-rolls coverage up onto domains. A trace is refused if instrumented pass/fail
-counts differ from a baseline run.
+rolls coverage up onto domains. `gnosis test` trusts its single run and
+reports vitest's own verdict; `gnosis trace` is the careful mode — it runs a
+clean baseline first and refuses a trace whose pass/fail counts differ from
+it.
 
 **Layers.** Domains are mechanical in v1: workspace entries plus first-level
 directories with their own package.json; large domains split by second-level

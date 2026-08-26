@@ -1,8 +1,15 @@
 /**
- * Runs the target's own test suite twice — a clean baseline, then
- * instrumented through the shim config — and refuses to accept a trace
- * whose pass/fail counts differ from baseline: a trace that changes test
- * behavior is worse than no trace. Reports the overhead honestly.
+ * Runs the target's own test suite through the instrumentation shim. Two
+ * entry points share the machinery:
+ *
+ * - `instrumentTarget` is middleware mode: ONE instrumented run that is
+ *   meant to *be* the pipeline's test run — output streams through, the
+ *   vitest exit status is reported back, and the trace is read off that
+ *   single run, SonarQube-style.
+ * - `traceTarget` is the careful mode: a clean baseline first, then the
+ *   instrumented run, refusing to accept a trace whose pass/fail counts
+ *   differ from baseline — a trace that changes test behavior is worse
+ *   than no trace. Reports the overhead honestly.
  */
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync } from 'node:fs';
@@ -15,12 +22,17 @@ export interface RunCounts {
   failed: number;
   total: number;
   wallMs: number;
+  /** vitest's exit status — non-zero when the suite failed. */
+  status: number;
 }
 
-export interface TraceRunResult {
-  baseline: RunCounts;
+export interface InstrumentedRunResult {
   instrumented: RunCounts;
   traceDir: string;
+}
+
+export interface TraceRunResult extends InstrumentedRunResult {
+  baseline: RunCounts;
 }
 
 const CONFIG_CANDIDATES = [
@@ -77,30 +89,64 @@ function runVitest(
     failed: report.numFailedTests,
     total: report.numTotalTests,
     wallMs,
+    status: result.status ?? 1,
   };
 }
 
+function newTraceDir(dataDir: string): string {
+  const runId = new Date().toISOString().replace(/[:.]/g, '-');
+  const traceDir = join(dataDir, 'traces', runId);
+  mkdirSync(traceDir, { recursive: true });
+  return traceDir;
+}
+
+function runInstrumented(
+  targetRoot: string,
+  traceDir: string,
+  config: GnosisConfig,
+  vitestArgs: string[],
+): RunCounts {
+  const targetConfig = findTargetConfig(targetRoot);
+  const shim = ownSibling(import.meta.url, 'shim.vitest.config');
+  return runVitest(
+    targetRoot,
+    join(traceDir, 'run.json'),
+    ['--config', shim, ...vitestArgs],
+    {
+      GNOSIS_TARGET_ROOT: targetRoot,
+      GNOSIS_TARGET_CONFIG: targetConfig,
+      GNOSIS_OUT_DIR: traceDir,
+      GNOSIS_TRACE_EXCLUDE: JSON.stringify(config.trace?.exclude ?? []),
+    },
+  );
+}
+
+/** Middleware mode: one instrumented run, no baseline. */
+export function instrumentTarget(
+  targetRoot: string,
+  dataDir: string,
+  config: GnosisConfig,
+  vitestArgs: string[] = [],
+): InstrumentedRunResult {
+  const traceDir = newTraceDir(dataDir);
+  const instrumented = runInstrumented(targetRoot, traceDir, config, vitestArgs);
+  return { instrumented, traceDir };
+}
+
+/** Careful mode: baseline first, then instrumented, refusing a divergent trace. */
 export function traceTarget(
   targetRoot: string,
   dataDir: string,
   config: GnosisConfig,
+  vitestArgs: string[] = [],
 ): TraceRunResult {
-  const targetConfig = findTargetConfig(targetRoot);
-  const runId = new Date().toISOString().replace(/[:.]/g, '-');
-  const traceDir = join(dataDir, 'traces', runId);
-  mkdirSync(traceDir, { recursive: true });
+  const traceDir = newTraceDir(dataDir);
 
   process.stdout.write('baseline run…\n');
-  const baseline = runVitest(targetRoot, join(traceDir, 'baseline.json'), [], {});
+  const baseline = runVitest(targetRoot, join(traceDir, 'baseline.json'), vitestArgs, {});
 
   process.stdout.write('instrumented run…\n');
-  const shim = ownSibling(import.meta.url, 'shim.vitest.config');
-  const instrumented = runVitest(targetRoot, join(traceDir, 'run.json'), ['--config', shim], {
-    GNOSIS_TARGET_ROOT: targetRoot,
-    GNOSIS_TARGET_CONFIG: targetConfig,
-    GNOSIS_OUT_DIR: traceDir,
-    GNOSIS_TRACE_EXCLUDE: JSON.stringify(config.trace?.exclude ?? []),
-  });
+  const instrumented = runInstrumented(targetRoot, traceDir, config, vitestArgs);
 
   if (baseline.passed !== instrumented.passed || baseline.failed !== instrumented.failed) {
     throw new Error(

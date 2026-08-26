@@ -5,7 +5,8 @@ const HELP = `gnosis — a self-maintaining knowledge graph for codebases
 
 usage:
   gnosis scan  <repo>                    static analysis → graph.json
-  gnosis trace <repo> [-- vitest args]   run the target's tests instrumented; overlay the graph
+  gnosis test  <repo> [-- vitest args]   THE test run, instrumented once; overlay the graph, exit like vitest
+  gnosis trace <repo> [-- vitest args]   careful mode: baseline run, then instrumented, verified against it
   gnosis serve <repo> [--port 4400]      interactive two-layer visualization
   gnosis export <repo> [--out <dir>]     static site (viz + graph.json) for publishing
   gnosis mcp   <repo>                    MCP server over stdio
@@ -18,6 +19,10 @@ export async function main(argv: string[]): Promise<void> {
     case 'scan': {
       const { runScan } = await import('./commands/scan.ts');
       return runScan(rest);
+    }
+    case 'test': {
+      const { runTest } = await import('./commands/test.ts');
+      return runTest(rest);
     }
     case 'trace': {
       const { runTrace } = await import('./commands/trace.ts');

@@ -5,10 +5,12 @@ import { scanTarget } from '../../analyzer/scan.ts';
 import { mergeTraces } from '../../graph/merge.ts';
 import { loadGraph, saveGraph } from '../../graph/store.ts';
 import { traceTarget } from '../../tracer/run.ts';
+import { splitVitestArgs } from './test.ts';
 
 export async function runTrace(argv: string[]): Promise<void> {
+  const { own, vitest } = splitVitestArgs(argv);
   const { positionals, values } = parseArgs({
-    args: argv,
+    args: own,
     allowPositionals: true,
     options: { config: { type: 'string' } },
   });
@@ -25,7 +27,7 @@ export async function runTrace(argv: string[]): Promise<void> {
     saveGraph(graphPath, scanTarget(targetRoot, config));
   }
 
-  const run = traceTarget(targetRoot, dataDir, config);
+  const run = traceTarget(targetRoot, dataDir, config, vitest);
   const graph = loadGraph(graphPath);
   const stats = mergeTraces(graph, run.traceDir);
   saveGraph(graphPath, graph);
