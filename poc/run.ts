@@ -10,7 +10,7 @@ import { readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { dataDirFor, graphPathFor } from '../src/config.ts';
 import type { GraphArtifact, NodeKind } from '../src/graph/schema.ts';
-import { cut, indexGraph, liftEdges, openPassThrough, openToDepth } from './model.ts';
+import { cut, indexGraph, liftEdges, openPassThrough, openToDepth } from '../src/graph/cut.ts';
 import { layout, type LayoutOptions } from './layout.ts';
 import { renderHtml } from './render.ts';
 

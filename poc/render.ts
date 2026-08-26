@@ -8,7 +8,7 @@
  * nesting is the folder tree.
  */
 import type { GraphArtifact } from '../src/graph/schema.ts';
-import { domainOf, type Index, type LiftedEdge } from './model.ts';
+import { domainOf, type Index, type LiftedEdge } from '../src/graph/cut.ts';
 import type { Layout } from './layout.ts';
 
 const xml = (s: string) =>

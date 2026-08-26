@@ -13,7 +13,7 @@ import { resolve } from 'node:path';
 import { Graphviz } from '@hpcc-js/wasm-graphviz';
 import { dataDirFor, graphPathFor } from '../src/config.ts';
 import type { GNode, GraphArtifact, NodeKind } from '../src/graph/schema.ts';
-import { childrenOf, cut, domainOf, indexGraph, liftEdges, openToDepth } from './model.ts';
+import { childrenOf, cut, domainOf, indexGraph, liftEdges, openToDepth } from '../src/graph/cut.ts';
 
 const argv = process.argv.slice(2);
 const flag = (n: string) => {

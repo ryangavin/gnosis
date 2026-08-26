@@ -11,7 +11,7 @@
 import ELK from 'elkjs';
 import type { ElkNode } from 'elkjs';
 import type { GNode } from '../src/graph/schema.ts';
-import { childrenOf, type Index, type LiftedEdge } from './model.ts';
+import { childrenOf, type Index, type LiftedEdge } from '../src/graph/cut.ts';
 
 export interface Box {
   id: string;

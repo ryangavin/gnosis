@@ -6,7 +6,7 @@
  * Nothing here knows about ELK or about rendering — this is the part that
  * survives whatever we draw with. `open` is the only state the UI owns.
  */
-import type { GEdge, GNode, GraphArtifact, NodeKind } from '../src/graph/schema.ts';
+import type { GEdge, GNode, GraphArtifact, NodeKind } from './schema.ts';
 
 export interface Index {
   byId: Map<string, GNode>;
