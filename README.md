@@ -95,9 +95,12 @@ The viz is a single force-directed galaxy rendered by
 [cosmos.gl](https://github.com/cosmosgl/graph) — every file a square,
 every function a dot, React components diamonds — with the layout emerging
 from GPU physics: containment springs hold a file's functions around it,
-cluster forces gather each top-level domain into its own labeled
-constellation, repulsion does the rest. Color always means domain
-identity, nothing else. Bright points ran under the test suite, dim ones
+folder springs hold directory siblings together, and cluster forces pin
+each leaf domain to its own anchor — subdomains orbiting their family's
+spot on the ring — so a domain reads as a labeled constellation with
+visible internal structure. Color always means domain identity, nothing
+else. Zoom in and on-screen files grow name tags, with functions joining
+at reveal depth. Bright points ran under the test suite, dim ones
 are static-only; solid links were observed under tests (width is call
 volume), dashed links are static-only calls, dotted links are imports.
 

@@ -102,10 +102,11 @@ export const CosmosView = forwardRef<CosmosHandle, Props>(function CosmosView(
       // seed ring (setClusterPositions below), so the cluster force only
       // holds identity — repulsion is what gives a big domain its area.
       // Gravity stays tiny, just enough to keep unclustered strays in frame.
-      // simulationDecay counts FRAMES, not ms: 700 ≈ a ten-second settle at
-      // 60fps, front-loaded by the exponential — the old 5000 left the graph
-      // trembling for over a minute, unwatchable once zoomed in.
-      simulationDecay: 700,
+      // simulationDecay counts FRAMES, not ms: 150 ≈ a second of visible
+      // motion at 60fps, fully at rest by ~2.5s. The seed layout carries the
+      // structure (pinned anchors, tight jitter), so the simulation only has
+      // to relax it, not discover it.
+      simulationDecay: 150,
       simulationGravity: 0.05,
       simulationCenter: 0,
       simulationRepulsion: 3,
@@ -228,8 +229,8 @@ export const CosmosView = forwardRef<CosmosHandle, Props>(function CosmosView(
         : undefined;
       if (domain) {
         const members: number[] = [];
-        projection.clusters.forEach((c, i) => {
-          if (c === domain.cluster) members.push(i);
+        projection.families.forEach((f, i) => {
+          if (f === domain.family) members.push(i);
         });
         g.setConfigPartial({ focusedPointIndex: undefined, highlightedPointIndices: members });
       } else {
@@ -251,8 +252,8 @@ export const CosmosView = forwardRef<CosmosHandle, Props>(function CosmosView(
     const domain = projection.domains.find((d) => d.id === focus);
     if (domain) {
       const members: number[] = [];
-      projection.clusters.forEach((c, i) => {
-        if (c === domain.cluster) members.push(i);
+      projection.families.forEach((f, i) => {
+        if (f === domain.family) members.push(i);
       });
       if (members.length > 0) g.fitViewByPointIndices(members, 700, 0.4);
     }
@@ -278,7 +279,7 @@ export const CosmosView = forwardRef<CosmosHandle, Props>(function CosmosView(
       if (!g?.isReady) return;
       const pos = g.getPointPositions();
       const sums = new Map<number, [number, number, number]>();
-      projection.clusters.forEach((c, i) => {
+      projection.families.forEach((c, i) => {
         if (c === undefined) return;
         const x = pos[i * 2];
         const y = pos[i * 2 + 1];
@@ -323,9 +324,9 @@ export const CosmosView = forwardRef<CosmosHandle, Props>(function CosmosView(
       const g = graphRef.current;
       if (g?.isReady) {
         for (const d of projection.domains) {
-          const el = labelRefs.current.get(d.cluster);
+          const el = labelRefs.current.get(d.family);
           if (!el) continue;
-          const center = centroids.get(d.cluster);
+          const center = centroids.get(d.family);
           if (!center) {
             el.style.opacity = '0';
             continue;
@@ -389,8 +390,8 @@ export const CosmosView = forwardRef<CosmosHandle, Props>(function CosmosView(
             className="cluster-label"
             style={{ color: d.color }}
             ref={(el) => {
-              if (el) labelRefs.current.set(d.cluster, el);
-              else labelRefs.current.delete(d.cluster);
+              if (el) labelRefs.current.set(d.family, el);
+              else labelRefs.current.delete(d.family);
             }}
             onClick={() => onSelect(d.id)}
           >

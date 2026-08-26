@@ -44,14 +44,16 @@ describe('project', () => {
     const p = project(fixture(), { showTests: true });
     expect(p.ids).toContain('file:core/a.test.ts');
     expect(p.ids).toContain('fn:core/a.test.ts#t');
-    // containment (4 fn→file) + 3 calls + 1 import
-    expect(p.links.length / 2).toBe(8);
+    // containment (4 fn→file) + folder spring (a.ts ~ a.test.ts) + 3 calls + 1 import
+    expect(p.links.length / 2).toBe(9);
   });
 
   it('clusters points under their top-level domain', () => {
     const p = project(fixture(), { showTests: false });
     expect(p.clusters[p.indexOf.get('fn:core/a.ts#f')!]).toBe(0);
     expect(p.clusters[p.indexOf.get('file:ui/B.tsx')!]).toBe(1);
+    expect(p.families[p.indexOf.get('fn:core/a.ts#f')!]).toBe(0);
+    expect(p.families[p.indexOf.get('file:ui/B.tsx')!]).toBe(1);
     expect(p.domains.map((d) => d.name)).toEqual(['core', 'ui']);
   });
 
@@ -60,6 +62,61 @@ describe('project', () => {
     expect(p.clusterPositions.length).toBe(p.domains.length * 2);
     const [ax, ay, bx, by] = p.clusterPositions as [number, number, number, number];
     expect(Math.hypot(ax - bx, ay - by)).toBeGreaterThan(1000);
+  });
+
+  it('a subdomain holds its own cluster on a mini-ring near its family', () => {
+    const g: GraphArtifact = {
+      version: 1,
+      target: { root: '/r', name: 'fx', scannedAt: 'now', limitations: [] },
+      nodes: [
+        { id: 'repo', kind: 'repo', name: 'fx' },
+        { id: 'domain:app', kind: 'domain', name: 'app', parent: 'repo' },
+        { id: 'domain:app/ui', kind: 'domain', name: 'app/ui', parent: 'domain:app' },
+        { id: 'domain:app/core', kind: 'domain', name: 'app/core', parent: 'domain:app' },
+        { id: 'file:app/root.ts', kind: 'file', name: 'root.ts', parent: 'domain:app' },
+        { id: 'file:app/ui/a.tsx', kind: 'file', name: 'a.tsx', parent: 'domain:app/ui' },
+        { id: 'file:app/core/b.ts', kind: 'file', name: 'b.ts', parent: 'domain:app/core' },
+      ],
+      edges: [],
+    };
+    const p = project(g, { showTests: false });
+    const root = p.clusters[p.indexOf.get('file:app/root.ts')!]!;
+    const ui = p.clusters[p.indexOf.get('file:app/ui/a.tsx')!]!;
+    const core = p.clusters[p.indexOf.get('file:app/core/b.ts')!]!;
+    // three distinct constellations, one family
+    expect(new Set([root, ui, core]).size).toBe(3);
+    expect(p.families.every((f) => f === 0)).toBe(true);
+    // sub anchors orbit the family anchor, far closer than the main ring
+    const dist = (a: number, b: number): number =>
+      Math.hypot(
+        p.clusterPositions[a * 2]! - p.clusterPositions[b * 2]!,
+        p.clusterPositions[a * 2 + 1]! - p.clusterPositions[b * 2 + 1]!,
+      );
+    expect(dist(root, ui)).toBeGreaterThan(0);
+    expect(dist(root, ui)).toBeLessThan(500);
+    expect(dist(root, core)).toBeLessThan(500);
+  });
+
+  it('files sharing a directory are bound by a folder spring', () => {
+    const g: GraphArtifact = {
+      version: 1,
+      target: { root: '/r', name: 'fx', scannedAt: 'now', limitations: [] },
+      nodes: [
+        { id: 'repo', kind: 'repo', name: 'fx' },
+        { id: 'domain:core', kind: 'domain', name: 'core', parent: 'repo' },
+        { id: 'file:core/x/a.ts', kind: 'file', name: 'a.ts', parent: 'domain:core' },
+        { id: 'file:core/x/b.ts', kind: 'file', name: 'b.ts', parent: 'domain:core' },
+        { id: 'file:core/y/c.ts', kind: 'file', name: 'c.ts', parent: 'domain:core' },
+      ],
+      edges: [],
+    };
+    const p = project(g, { showTests: false });
+    // exactly one spring: a.ts ~ b.ts share core/x, c.ts sits alone in core/y
+    expect(p.links.length / 2).toBe(1);
+    const [from, to] = [p.links[0]!, p.links[1]!];
+    const pair = new Set([p.ids[from]!, p.ids[to]!]);
+    expect(pair).toEqual(new Set(['file:core/x/a.ts', 'file:core/x/b.ts']));
+    expect(p.linkArrows[0]).toBe(false);
   });
 
   it('an edge with a hidden endpoint is dropped entirely', () => {

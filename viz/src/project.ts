@@ -3,9 +3,11 @@
  * flat-galaxy successor to the old semantic-zoom derivation. Every file and
  * every function is a point; there is no expand/collapse. Structure comes
  * from forces instead of nesting: containment springs pull functions around
- * their file's hub, cluster forces pull each top-level domain together, and
- * color keeps carrying domain identity. Pure and unit-tested — the WebGL
- * layer just uploads the result.
+ * their file's hub, folder springs hold directory siblings together, and
+ * cluster forces pin each leaf domain to its own anchor — subdomains on a
+ * mini-ring around their family's spot on the main ring — while color keeps
+ * carrying domain identity. Pure and unit-tested — the WebGL layer just
+ * uploads the result.
  *
  * Visual language:
  *   squares = files, dots = functions, diamonds = react components
@@ -31,7 +33,8 @@ export const STYLE_DOTTED = 2;
 export interface DomainLabel {
   id: string;
   name: string;
-  cluster: number;
+  /** Top-domain index — matches `families`, not the finer physics clusters. */
+  family: number;
   color: string;
   hue: number;
 }
@@ -45,7 +48,10 @@ export interface Projection {
   colors: Float32Array;
   sizes: Float32Array;
   shapes: Float32Array;
+  /** Physics cluster per point — the leaf domain, one anchor per constellation. */
   clusters: (number | undefined)[];
+  /** Top-domain index per point — what labels, selection, and reveal group by. */
+  families: (number | undefined)[];
   clusterStrength: Float32Array;
   /** Pinned anchor per cluster (x,y pairs) — the ring the constellations hold. */
   clusterPositions: number[];
@@ -93,22 +99,43 @@ export function project(graph: GraphArtifact, options: ProjectOptions): Projecti
   };
 
   // Hue = family: golden-angle bases per top domain, subdomains nudged a few
-  // degrees around their family. Clusters are the top domains only — a
-  // subdomain's points gather with its family, its hue still tells it apart.
+  // degrees around their family. Physics clusters are the *leaf* domains:
+  // each subdomain holds its own pinned anchor on a mini-ring around its
+  // family's spot on the main ring, so directory structure shows up as
+  // spatial grouping, not just hue. Labels and selection stay at the family
+  // level via `families`.
   const topDomains = (childrenOf.get('repo') ?? []).filter((n) => n.kind === 'domain');
   const domainHues = new Map<string, number>();
+  const familyOf = new Map<string, number>();
   const clusterOf = new Map<string, number>();
-  topDomains.forEach((d, i) => {
-    domainHues.set(d.id, familyHue(i));
-    clusterOf.set(d.id, i);
-  });
-  for (const top of topDomains) {
+  const clusterPositions: number[] = [];
+
+  const center = SPACE_SIZE / 2;
+  const ring = SPACE_SIZE * 0.24;
+  const familyAnchor = (i: number): [number, number] => {
+    if (topDomains.length === 0) return [center, center];
+    const angle = (i / topDomains.length) * Math.PI * 2;
+    return [center + ring * Math.cos(angle), center + ring * Math.sin(angle)];
+  };
+  const addCluster = (x: number, y: number): number => {
+    clusterPositions.push(x, y);
+    return clusterPositions.length / 2 - 1;
+  };
+
+  topDomains.forEach((top, i) => {
+    domainHues.set(top.id, familyHue(i));
+    familyOf.set(top.id, i);
+    const [ax, ay] = familyAnchor(i);
+    clusterOf.set(top.id, addCluster(ax, ay));
     const subs = (childrenOf.get(top.id) ?? []).filter((c) => c.kind === 'domain');
+    const mini = SPACE_SIZE * Math.min(0.075, 0.03 + 0.012 * subs.length);
     subs.forEach((sub, j) => {
-      domainHues.set(sub.id, subdomainHue(domainHues.get(top.id)!, j, subs.length));
-      clusterOf.set(sub.id, clusterOf.get(top.id)!);
+      domainHues.set(sub.id, subdomainHue(familyHue(i), j, subs.length));
+      familyOf.set(sub.id, i);
+      const angle = (i / topDomains.length + j / Math.max(1, subs.length)) * Math.PI * 2;
+      clusterOf.set(sub.id, addCluster(ax + mini * Math.cos(angle), ay + mini * Math.sin(angle)));
     });
-  }
+  });
 
   const ancestorLookup = <T>(map: Map<string, T>, node: GNode): T | undefined => {
     let current: GNode | undefined = node;
@@ -142,36 +169,34 @@ export function project(graph: GraphArtifact, options: ProjectOptions): Projecti
   const sizes = new Float32Array(count);
   const shapes = new Float32Array(count);
   const clusters: (number | undefined)[] = new Array<number | undefined>(count);
+  const families: (number | undefined)[] = new Array<number | undefined>(count);
   const clusterStrength = new Float32Array(count);
 
-  const center = SPACE_SIZE / 2;
-  const ring = SPACE_SIZE * 0.24;
   const anchorOf = (cluster: number | undefined): [number, number] => {
-    if (cluster === undefined || topDomains.length === 0) return [center, center];
-    const angle = (cluster / topDomains.length) * Math.PI * 2;
-    return [center + ring * Math.cos(angle), center + ring * Math.sin(angle)];
+    if (cluster === undefined) return [center, center];
+    return [clusterPositions[cluster * 2]!, clusterPositions[cluster * 2 + 1]!];
   };
 
-  const clusterPositions: number[] = [];
-  topDomains.forEach((_, i) => clusterPositions.push(...anchorOf(i)));
-
+  // Seed tight around the leaf anchor: with a one-second settle the seed has
+  // to already be most of the answer — the simulation only relaxes it.
   const fileSeed = new Map<string, [number, number]>();
   points.forEach((node, i) => {
     const hue = ancestorLookup(domainHues, node) ?? 0;
     const cluster = ancestorLookup(clusterOf, node);
     clusters[i] = cluster;
+    families[i] = ancestorLookup(familyOf, node);
 
     let x: number;
     let y: number;
     if (node.kind === 'file') {
       const [ax, ay] = anchorOf(cluster);
-      x = ax + (hashUnit(node.id, 1) - 0.5) * SPACE_SIZE * 0.18;
-      y = ay + (hashUnit(node.id, 2) - 0.5) * SPACE_SIZE * 0.18;
+      x = ax + (hashUnit(node.id, 1) - 0.5) * SPACE_SIZE * 0.05;
+      y = ay + (hashUnit(node.id, 2) - 0.5) * SPACE_SIZE * 0.05;
       fileSeed.set(node.id, [x, y]);
     } else {
       const [fx, fy] = fileSeed.get(node.parent ?? '') ?? anchorOf(cluster);
-      x = fx + (hashUnit(node.id, 3) - 0.5) * SPACE_SIZE * 0.05;
-      y = fy + (hashUnit(node.id, 4) - 0.5) * SPACE_SIZE * 0.05;
+      x = fx + (hashUnit(node.id, 3) - 0.5) * SPACE_SIZE * 0.02;
+      y = fy + (hashUnit(node.id, 4) - 0.5) * SPACE_SIZE * 0.02;
     }
     positions[i * 2] = x;
     positions[i * 2 + 1] = y;
@@ -233,6 +258,28 @@ export function project(graph: GraphArtifact, options: ProjectOptions): Projecti
     pushLink(i, fileIndex, [r, g, b, 0.1], 0.4, STYLE_SOLID, false, 0.5);
   }
 
+  // Folder springs: files sharing a directory bind to the directory's first
+  // file — faint threads that give each constellation its folder texture,
+  // one level finer than the domain layer can see.
+  const byDir = new Map<string, number[]>();
+  for (const file of files) {
+    const rel = file.id.slice('file:'.length);
+    const slash = rel.lastIndexOf('/');
+    const dir = slash === -1 ? '' : rel.slice(0, slash);
+    const list = byDir.get(dir) ?? [];
+    list.push(indexOf.get(file.id)!);
+    byDir.set(dir, list);
+  }
+  for (const members of byDir.values()) {
+    if (members.length < 2) continue;
+    const hub = members[0]!;
+    const hue = ancestorLookup(domainHues, points[hub]!) ?? 0;
+    const [r, g, b] = oklchToRgb(0.55, 0.06, hue);
+    for (let m = 1; m < members.length; m += 1) {
+      pushLink(members[m]!, hub, [r, g, b, 0.08], 0.35, STYLE_SOLID, false, 0.4);
+    }
+  }
+
   for (const edge of graph.edges) {
     const from = indexOf.get(edge.from);
     const to = indexOf.get(edge.to);
@@ -261,7 +308,7 @@ export function project(graph: GraphArtifact, options: ProjectOptions): Projecti
   const domains: DomainLabel[] = topDomains.map((d, i) => ({
     id: d.id,
     name: d.name,
-    cluster: i,
+    family: i,
     color: `#${oklchToRgb(0.82, 0.1, familyHue(i))
       .map((c) => Math.round(c * 255).toString(16).padStart(2, '0'))
       .join('')}`,
@@ -276,6 +323,7 @@ export function project(graph: GraphArtifact, options: ProjectOptions): Projecti
     sizes,
     shapes,
     clusters,
+    families,
     clusterStrength,
     clusterPositions,
     links: new Float32Array(linkPairs),
