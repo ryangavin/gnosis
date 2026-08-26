@@ -48,19 +48,22 @@ export const CosmosView = forwardRef<CosmosHandle, Props>(function CosmosView(
   const graphRef = useRef<Graph>(null);
   const labelRefs = useRef(new Map<number, HTMLButtonElement>());
   const saveTimer = useRef<ReturnType<typeof setTimeout>>(null);
-  const fitTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
   const userZoomed = useRef(false);
+  const followArmed = useRef(false);
+  const followUntil = useRef(0);
+  const lastFollowFit = useRef(0);
   const [hover, setHover] = useState<Hover>();
 
-  // Follow the expanding simulation with the camera until the user takes over.
+  // Follow the expanding simulation with the camera until the user takes
+  // over. Anchored to simulation ticks, not wall clock — on a cold load the
+  // WebGL device can take longer to init than any timer, and a fit queued
+  // before the first tick frames nothing. The window opens at the first
+  // tick after arming.
   const followSettling = (): void => {
-    for (const t of fitTimers.current) clearTimeout(t);
     userZoomed.current = false;
-    fitTimers.current = [600, 1800, 3600].map((ms) =>
-      setTimeout(() => {
-        if (!userZoomed.current) graphRef.current?.fitView(500);
-      }, ms),
-    );
+    followArmed.current = true;
+    followUntil.current = 0;
+    lastFollowFit.current = 0;
   };
 
   const byId = useMemo(() => new Map(graph.nodes.map((n) => [n.id, n])), [graph]);
@@ -83,6 +86,11 @@ export const CosmosView = forwardRef<CosmosHandle, Props>(function CosmosView(
     const g = new Graph(containerRef.current!, {
       spaceSize: SPACE_SIZE,
       backgroundColor: '#16181d',
+      // No data-update transitions: a position upload whose transition is in
+      // flight pauses the simulation and leaves it paused — which on a cold
+      // load kills the very first settle. Camera moves pass explicit
+      // durations and are unaffected.
+      transitionDuration: 0,
       rescalePositions: false,
       fitViewOnInit: false,
       randomSeed: 'gnosis',
@@ -125,6 +133,20 @@ export const CosmosView = forwardRef<CosmosHandle, Props>(function CosmosView(
       onZoomStart: (_e, userDriven) => {
         if (userDriven) userZoomed.current = true;
       },
+      onSimulationTick: () => {
+        if (!followArmed.current) return;
+        const now = Date.now();
+        if (followUntil.current === 0) followUntil.current = now + 4500;
+        if (userZoomed.current || now >= followUntil.current) {
+          followArmed.current = false;
+          return;
+        }
+        if (now - lastFollowFit.current < 450) return;
+        lastFollowFit.current = now;
+        // enableSimulation: a camera transition otherwise suspends the
+        // simulation — and with it these very ticks.
+        graphRef.current?.fitView(400, undefined, true);
+      },
       onDragEnd: () => scheduleSave(),
       onSimulationStart: () => live.current.onRunningChange(true),
       onSimulationUnpause: () => live.current.onRunningChange(true),
@@ -138,12 +160,10 @@ export const CosmosView = forwardRef<CosmosHandle, Props>(function CosmosView(
       },
     });
     graphRef.current = g;
-
-    const onUnload = (): void => save();
-    window.addEventListener('beforeunload', onUnload);
+    // No save on unload or unmount: the meaningful states (simulation
+    // ended, paused, a drag finished) already save themselves, and saving a
+    // never-simulated seed layout would pin it as "restored" forever.
     return () => {
-      window.removeEventListener('beforeunload', onUnload);
-      save();
       g.destroy();
       graphRef.current = null;
     };
@@ -186,17 +206,11 @@ export const CosmosView = forwardRef<CosmosHandle, Props>(function CosmosView(
     const mostlyRestored = restored >= projection.ids.length * 0.5;
     if (mostlyRestored) {
       onRunningChange(false);
-      // The queued fitView can land before the uploaded positions do; fit
-      // once the device is actually ready, instantly, before first paint
-      // matters.
-      void g.ready.then(() => setTimeout(() => g.fitView(0), 60));
+      g.fitView(0);
     } else {
       g.start(1);
       followSettling();
     }
-    return () => {
-      for (const t of fitTimers.current) clearTimeout(t);
-    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projection, graph]);
 

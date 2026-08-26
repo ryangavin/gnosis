@@ -1,6 +1,6 @@
 {
   "name": "gnosis",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "type": "module",
   "description": "A self-maintaining knowledge graph for codebases: files, functions, calls, docs, domains.",
   "license": "MIT",
