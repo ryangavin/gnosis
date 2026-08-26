@@ -47,24 +47,11 @@ export const CosmosView = forwardRef<CosmosHandle, Props>(function CosmosView(
   const containerRef = useRef<HTMLDivElement>(null);
   const graphRef = useRef<Graph>(null);
   const labelRefs = useRef(new Map<number, HTMLButtonElement>());
+  const fileLabelRefs = useRef(new Map<number, HTMLDivElement>());
   const saveTimer = useRef<ReturnType<typeof setTimeout>>(null);
   const userZoomed = useRef(false);
-  const followArmed = useRef(false);
-  const followUntil = useRef(0);
-  const lastFollowFit = useRef(0);
   const [hover, setHover] = useState<Hover>();
-
-  // Follow the expanding simulation with the camera until the user takes
-  // over. Anchored to simulation ticks, not wall clock — on a cold load the
-  // WebGL device can take longer to init than any timer, and a fit queued
-  // before the first tick frames nothing. The window opens at the first
-  // tick after arming.
-  const followSettling = (): void => {
-    userZoomed.current = false;
-    followArmed.current = true;
-    followUntil.current = 0;
-    lastFollowFit.current = 0;
-  };
+  const [fileLabels, setFileLabels] = useState<{ index: number; name: string }[]>([]);
 
   const byId = useMemo(() => new Map(graph.nodes.map((n) => [n.id, n])), [graph]);
 
@@ -108,18 +95,24 @@ export const CosmosView = forwardRef<CosmosHandle, Props>(function CosmosView(
       linkDashLength: 5,
       linkDashGap: 4,
       curvedLinks: true,
+      // Default control distance (0.5) bows short in-cluster links into
+      // yarn loops close up; 0.15 keeps a hint of arc without the tangle.
+      curvedLinkControlPointDistance: 0.15,
       // Constellations, not hairballs: cluster anchors are pinned to the
       // seed ring (setClusterPositions below), so the cluster force only
       // holds identity — repulsion is what gives a big domain its area.
       // Gravity stays tiny, just enough to keep unclustered strays in frame.
-      simulationDecay: 5000,
+      // simulationDecay counts FRAMES, not ms: 700 ≈ a ten-second settle at
+      // 60fps, front-loaded by the exponential — the old 5000 left the graph
+      // trembling for over a minute, unwatchable once zoomed in.
+      simulationDecay: 700,
       simulationGravity: 0.05,
       simulationCenter: 0,
       simulationRepulsion: 3,
       simulationRepulsionTheta: 1.7,
       simulationLinkSpring: 0.2,
       simulationLinkDistance: 15,
-      simulationFriction: 0.85,
+      simulationFriction: 0.8,
       simulationCluster: 0.35,
       onPointClick: (index) => live.current.onSelect(live.current.projection.ids[index]),
       onBackgroundClick: () => live.current.onSelect(undefined),
@@ -139,20 +132,6 @@ export const CosmosView = forwardRef<CosmosHandle, Props>(function CosmosView(
       onZoomStart: (_e, userDriven) => {
         if (userDriven) userZoomed.current = true;
       },
-      onSimulationTick: () => {
-        if (!followArmed.current) return;
-        const now = Date.now();
-        if (followUntil.current === 0) followUntil.current = now + 5500;
-        if (userZoomed.current || now >= followUntil.current) {
-          followArmed.current = false;
-          return;
-        }
-        if (now - lastFollowFit.current < 450) return;
-        lastFollowFit.current = now;
-        // enableSimulation: a camera transition otherwise suspends the
-        // simulation — and with it these very ticks.
-        graphRef.current?.fitView(400, undefined, true);
-      },
       onDragEnd: () => scheduleSave(),
       onSimulationStart: () => live.current.onRunningChange(true),
       onSimulationUnpause: () => live.current.onRunningChange(true),
@@ -170,6 +149,7 @@ export const CosmosView = forwardRef<CosmosHandle, Props>(function CosmosView(
       },
     });
     graphRef.current = g;
+    if (import.meta.env.DEV) (window as unknown as { __gnosis?: Graph }).__gnosis = g;
     // No save on unload or unmount: the meaningful states (simulation
     // ended, paused, a drag finished) already save themselves, and saving a
     // never-simulated seed layout would pin it as "restored" forever.
@@ -219,8 +199,13 @@ export const CosmosView = forwardRef<CosmosHandle, Props>(function CosmosView(
       onRunningChange(false);
       g.fitView(0);
     } else {
+      // No camera chase during the settle: the cluster anchors pin the ring,
+      // so the seed extent already approximates the resting extent. Frame it
+      // once, hold still while the galaxy blooms into place, and let the
+      // onSimulationEnd fit make the only camera move.
+      userZoomed.current = false;
+      g.fitView(0, 0.15);
       g.start(1);
-      followSettling();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projection, graph]);
@@ -274,12 +259,20 @@ export const CosmosView = forwardRef<CosmosHandle, Props>(function CosmosView(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focus, focusNonce]);
 
-  // Domain labels ride their constellation centroids, updated outside React.
-  // Centroids are averaged from real point positions on a slow clock (the
-  // read syncs with the GPU); the space→screen transform runs every frame so
-  // labels stay glued through pan and zoom.
+  // Labels ride the graph, updated outside React. Domain labels sit on
+  // their constellation centroids at any zoom; past cluster scale, on-screen
+  // points grow name tags (files first — they lead the point array — then
+  // functions once close enough to read call structure). Membership is
+  // recomputed on a slow clock (the position read syncs with the GPU); the
+  // space→screen transform runs every frame so labels stay glued through
+  // pan and zoom.
+  const FILE_LABEL_ZOOM = 1.5;
+  const FN_LABEL_ZOOM = 3;
+  const MAX_POINT_LABELS = 80;
   useEffect(() => {
     const centroids = new Map<number, [number, number]>();
+    const pointPos = new Map<number, [number, number]>();
+    let shown: number[] = [];
     const recompute = (): void => {
       const g = graphRef.current;
       if (!g?.isReady) return;
@@ -298,6 +291,31 @@ export const CosmosView = forwardRef<CosmosHandle, Props>(function CosmosView(
       });
       centroids.clear();
       for (const [c, [sx, sy, n]] of sums) centroids.set(c, [sx / n, sy / n]);
+
+      const zoom = g.getZoomLevel();
+      const width = containerRef.current?.clientWidth ?? 0;
+      const height = containerRef.current?.clientHeight ?? 0;
+      const next: { index: number; name: string }[] = [];
+      pointPos.clear();
+      if (zoom >= FILE_LABEL_ZOOM && width > 0) {
+        for (let i = 0; i < projection.ids.length && next.length < MAX_POINT_LABELS; i += 1) {
+          const id = projection.ids[i]!;
+          const isFile = id.startsWith('file:');
+          if (!isFile && zoom < FN_LABEL_ZOOM) continue;
+          const x = pos[i * 2];
+          const y = pos[i * 2 + 1];
+          if (x === undefined || y === undefined || Number.isNaN(x) || Number.isNaN(y)) continue;
+          const [sx, sy] = g.spaceToScreenPosition([x, y]);
+          if (sx < -40 || sx > width + 40 || sy < -20 || sy > height + 20) continue;
+          pointPos.set(i, [x, y]);
+          next.push({ index: i, name: byId.get(id)?.name ?? id });
+        }
+      }
+      const nextIndices = next.map((l) => l.index);
+      if (nextIndices.length !== shown.length || nextIndices.some((v, i) => v !== shown[i])) {
+        shown = nextIndices;
+        setFileLabels(next);
+      }
     };
 
     let raf = 0;
@@ -316,6 +334,17 @@ export const CosmosView = forwardRef<CosmosHandle, Props>(function CosmosView(
           el.style.transform = `translate(${sx}px, ${sy}px) translate(-50%, -50%)`;
           el.style.opacity = '1';
         }
+        for (const [index, el] of fileLabelRefs.current) {
+          const p = pointPos.get(index);
+          if (!p) {
+            el.style.opacity = '0';
+            continue;
+          }
+          const [sx, sy] = g.spaceToScreenPosition(p);
+          const offset = (projection.sizes[index] ?? 4) / 2 + 3;
+          el.style.transform = `translate(${sx}px, ${sy + offset}px) translateX(-50%)`;
+          el.style.opacity = '1';
+        }
       }
       raf = requestAnimationFrame(tick);
     };
@@ -326,8 +355,9 @@ export const CosmosView = forwardRef<CosmosHandle, Props>(function CosmosView(
     return () => {
       clearInterval(interval);
       cancelAnimationFrame(raf);
+      setFileLabels([]);
     };
-  }, [projection]);
+  }, [projection, byId]);
 
   useImperativeHandle(handle, () => ({
     pause() {
@@ -344,8 +374,9 @@ export const CosmosView = forwardRef<CosmosHandle, Props>(function CosmosView(
       if (!g) return;
       clearLayout(live.current.target);
       g.setPointPositions(new Float32Array(live.current.projection.positions), true);
+      userZoomed.current = false;
+      g.fitView(0, 0.15);
       g.start(1);
-      followSettling();
     },
   }));
 
@@ -365,6 +396,18 @@ export const CosmosView = forwardRef<CosmosHandle, Props>(function CosmosView(
           >
             {d.name}
           </button>
+        ))}
+        {fileLabels.map((l) => (
+          <div
+            key={l.index}
+            className="point-label"
+            ref={(el) => {
+              if (el) fileLabelRefs.current.set(l.index, el);
+              else fileLabelRefs.current.delete(l.index);
+            }}
+          >
+            {l.name}
+          </div>
         ))}
       </div>
       {hover && (

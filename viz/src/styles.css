@@ -123,6 +123,20 @@ body {
   text-underline-offset: 3px;
 }
 
+.point-label {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+  font-size: 9.5px;
+  color: rgba(232, 230, 223, 0.72);
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.95);
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity 0.25s;
+  z-index: 2;
+}
+
 .tooltip {
   position: absolute;
   top: 0;

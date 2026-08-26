@@ -230,7 +230,7 @@ export function project(graph: GraphArtifact, options: ProjectOptions): Projecti
     const i = indexOf.get(fn.id)!;
     const hue = ancestorLookup(domainHues, fn) ?? 0;
     const [r, g, b] = oklchToRgb(0.5, 0.06, hue);
-    pushLink(i, fileIndex, [r, g, b, 0.14], 0.5, STYLE_SOLID, false, 0.5);
+    pushLink(i, fileIndex, [r, g, b, 0.1], 0.4, STYLE_SOLID, false, 0.5);
   }
 
   for (const edge of graph.edges) {
@@ -241,7 +241,7 @@ export function project(graph: GraphArtifact, options: ProjectOptions): Projecti
     const hue = ancestorLookup(domainHues, source) ?? 0;
     if (edge.kind === 'imports') {
       const [r, g, b] = oklchToRgb(0.6, 0.07, hue);
-      pushLink(from, to, [r, g, b, 0.22], 0.7, STYLE_DOTTED, false, 0.08);
+      pushLink(from, to, [r, g, b, 0.18], 0.6, STYLE_DOTTED, false, 0.08);
     } else {
       const observed = edge.runtime !== undefined;
       const volume = edge.runtime?.count ?? 0;
@@ -249,8 +249,8 @@ export function project(graph: GraphArtifact, options: ProjectOptions): Projecti
       pushLink(
         from,
         to,
-        [r, g, b, observed ? 0.6 : 0.28],
-        observed ? 1 + Math.min(2.5, Math.log2(1 + volume) * 0.5) : 0.8,
+        [r, g, b, observed ? 0.5 : 0.22],
+        observed ? 0.7 + Math.min(1.6, Math.log2(1 + volume) * 0.35) : 0.6,
         observed ? STYLE_SOLID : STYLE_DASHED,
         true,
         0.15,
