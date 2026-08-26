@@ -16,6 +16,8 @@ export interface GraphArtifact {
     name: string;
     scannedAt: string;
     tracedAt?: string;
+    /** Test files the trace run observed; the denominator for `testBreadth`. */
+    testFileCount?: number;
     git?: { commit: string; branch: string };
     /** Honest notes about what this graph cannot see. */
     limitations: string[];
@@ -24,18 +26,22 @@ export interface GraphArtifact {
   edges: GEdge[];
 }
 
-export type NodeKind = 'repo' | 'domain' | 'file' | 'function';
+export type NodeKind = 'repo' | 'domain' | 'directory' | 'file' | 'function';
 
 export interface GNode {
   /**
-   * "repo" | "domain:visuals/render" | "file:core/src/ops.ts"
-   * | "fn:core/src/ops.ts#SnapshotStore.applyOps"
+   * "repo" | "domain:visuals" | "dir:visuals/src/render"
+   * | "file:core/src/ops.ts" | "fn:core/src/ops.ts#SnapshotStore.applyOps"
    */
   id: string;
   kind: NodeKind;
   /** Display name: basename, symbol name, or domain name. */
   name: string;
-  /** Containment: repo → domain → [subdomain] → file → function. */
+  /**
+   * Containment: repo → domain → directory* → file → function. Every
+   * directory between a domain and a file gets a node, so the folder
+   * structure is a drawable boundary rather than something hidden in an id.
+   */
   parent?: string;
   /** Function nodes: character span and 1-based start line in the file. */
   span?: { start: number; end: number; line: number };
@@ -53,8 +59,30 @@ export interface GNode {
     /** Associated markdown files; excerpts only, full bodies read on demand. */
     docFiles?: { path: string; title: string; excerpt: string }[];
   };
-  /** Rolled up onto domain and repo nodes at scan time. */
-  stats?: { loc?: number; files?: number; functions?: number; coveredFunctions?: number };
+  /**
+   * Rolled up onto every container (domain, directory, repo). The `test*`
+   * and `calls` fields come from a trace run and answer "how much does this
+   * matter" — breadth is the share of the suite that reaches it, which is a
+   * better importance signal than raw call volume on its own.
+   */
+  stats?: {
+    loc?: number;
+    files?: number;
+    functions?: number;
+    coveredFunctions?: number;
+    /** Distinct test files that reached this node or anything beneath it. */
+    testFiles?: number;
+    /** `testFiles` over the run's total, 0..1. */
+    testBreadth?: number;
+    /**
+     * Test files that call *into* this node or its subtree directly, rather
+     * than reaching it through some other production code. The difference
+     * between deliberately tested and incidentally covered.
+     */
+    directTests?: number;
+    /** Runtime calls observed at or beneath this node. */
+    calls?: number;
+  };
   /** Runtime observation; absent means unconfirmed by any test run. */
   runtime?: { calls: number; testFiles: string[] };
 }
@@ -87,4 +115,8 @@ export function functionId(relPath: string, qualifiedName: string): string {
 
 export function domainId(path: string): string {
   return `domain:${path}`;
+}
+
+export function directoryId(path: string): string {
+  return `dir:${path}`;
 }

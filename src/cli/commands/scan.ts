@@ -25,7 +25,8 @@ export async function runScan(argv: string[]): Promise<void> {
   const count = (kind: string): number => graph.nodes.filter((n) => n.kind === kind).length;
   process.stdout.write(
     `scanned ${graph.target.name} in ${((Date.now() - started) / 1000).toFixed(1)}s\n` +
-      `  ${count('domain')} domains, ${count('file')} files, ${count('function')} functions\n` +
+      `  ${count('domain')} domains, ${count('directory')} directories, ` +
+      `${count('file')} files, ${count('function')} functions\n` +
       `  ${graph.edges.filter((e) => e.kind === 'calls').length} call edges, ` +
       `${graph.edges.filter((e) => e.kind === 'imports').length} import edges\n` +
       `  → ${path}\n`,

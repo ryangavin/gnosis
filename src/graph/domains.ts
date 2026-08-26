@@ -1,18 +1,21 @@
 /**
  * Layer-2 grouping, purely mechanical: top-level domains are the target's
  * workspace entries plus any first-level directory carrying its own
- * package.json (which catches non-workspace packages). A domain holding
- * more than SPLIT_THRESHOLD files splits into subdomains by its second-level
- * source directory, with `src/` treated as transparent.
+ * package.json (which catches non-workspace packages). Everything below a
+ * domain is the directory tree itself, one node per folder.
  *
- * A gnosis.yaml can override display names and descriptions; the future
- * LLM-labeling pass writes into that same slot.
+ * v1 split large domains by second-level source directory once they passed a
+ * file-count threshold, which meant a folder was a visible boundary only if
+ * its domain happened to be big — `set/lib` got a box, `chart/server` did
+ * not. The directory tree is the honest answer and needs no threshold.
+ *
+ * A gnosis.yaml can override display names and descriptions for any
+ * container path, domain or directory alike; the future LLM-labeling pass
+ * writes into that same slot.
  */
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import type { GnosisConfig } from '../config.ts';
-
-export const SPLIT_THRESHOLD = 30;
 
 export function discoverDomains(targetRoot: string): string[] {
   const domains = new Set<string>();
@@ -33,27 +36,35 @@ export function discoverDomains(targetRoot: string): string[] {
   return [...domains].sort();
 }
 
-export interface DomainAssignment {
+export interface Containers {
+  /** First path segment; absent for a file sitting at the repo root. */
   domain?: string;
-  subdomain?: string;
+  /** Every directory between the domain and the file, outermost first. */
+  directories: string[];
 }
 
 /**
- * Assign a file to its domain, and — when the domain is large enough to
- * split — its subdomain. A first-level directory that isn't a declared
- * domain still groups its files as an implicit one. `fileCounts` maps
- * domain → total file count. Files at the repo root belong to no domain.
+ * The containers a file sits inside. A first-level directory is the domain
+ * whether or not it declared itself one; each deeper folder is a directory.
+ *
+ *   "chart/server/bassline.ts" → { domain: "chart", directories: ["chart/server"] }
+ *   "core/ops.ts"             → { domain: "core",  directories: [] }
+ *   "vitest.config.ts"        → { directories: [] }
  */
-export function assignDomain(relPath: string, fileCounts: Map<string, number>): DomainAssignment {
+export function containersFor(relPath: string): Containers {
   const parts = relPath.split('/');
-  if (parts.length < 2) return {};
-  const domain = parts[0]!;
-  if ((fileCounts.get(domain) ?? 0) <= SPLIT_THRESHOLD) return { domain };
+  if (parts.length < 2) return { directories: [] };
+  const directories: string[] = [];
+  for (let i = 1; i < parts.length - 1; i++) {
+    directories.push(parts.slice(0, i + 1).join('/'));
+  }
+  return { domain: parts[0]!, directories };
+}
 
-  const rest = parts.slice(1);
-  const visible = rest[0] === 'src' ? rest.slice(1) : rest;
-  if (visible.length >= 2) return { domain, subdomain: `${domain}/${visible[0]!}` };
-  return { domain };
+/** The container one level up, or undefined at the top. */
+export function parentPath(path: string): string | undefined {
+  const cut = path.lastIndexOf('/');
+  return cut === -1 ? undefined : path.slice(0, cut);
 }
 
 export function domainDisplay(

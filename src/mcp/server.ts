@@ -264,10 +264,10 @@ export function createGnosisServer({ graph, targetRoot }: GnosisServerOptions): 
     'search',
     {
       title: 'Search the graph',
-      description: 'Find domains, files, or functions by name or doc summary.',
+      description: 'Find domains, directories, files, or functions by name or doc summary.',
       inputSchema: z.object({
         query: z.string().min(2),
-        kind: z.enum(['domain', 'file', 'function']).optional(),
+        kind: z.enum(['domain', 'directory', 'file', 'function']).optional(),
       }),
       annotations: annotations.read,
     },

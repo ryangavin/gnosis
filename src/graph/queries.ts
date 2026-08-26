@@ -190,7 +190,7 @@ export function domainDetail(ctx: Ctx, path: string): DomainDetail | undefined {
   const collect = (id: string): void => {
     for (const child of ctx.indexes.childrenOf.get(id) ?? []) {
       if (child.kind === 'file') fileNodes.push(child);
-      else if (child.kind === 'domain') collect(child.id);
+      else if (child.kind === 'domain' || child.kind === 'directory') collect(child.id);
     }
   };
   collect(domainId);

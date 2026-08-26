@@ -8,8 +8,9 @@ import { spawnSync } from 'node:child_process';
 import { readFileSync, realpathSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import type { GnosisConfig } from '../config.ts';
-import { assignDomain, discoverDomains, domainDisplay } from '../graph/domains.ts';
+import { containersFor, discoverDomains, domainDisplay, parentPath } from '../graph/domains.ts';
 import {
+  directoryId,
   domainId,
   edgeId,
   fileId,
@@ -123,19 +124,16 @@ export function scanTarget(targetRootInput: string, config: GnosisConfig): Graph
     }
   }
 
-  // --- Domains ---
-  const fileCounts = new Map<string, number>();
-  for (const f of files) {
-    const first = f.relPath.split('/')[0]!;
-    if (f.relPath.includes('/')) fileCounts.set(first, (fileCounts.get(first) ?? 0) + 1);
-  }
-  const assignments = new Map(files.map((f) => [f.relPath, assignDomain(f.relPath, fileCounts)]));
-  const domainPaths = [...new Set([...assignments.values()].flatMap((a) => (a.domain ? [a.domain] : [])))].sort();
-  const subdomainPaths = [
-    ...new Set([...assignments.values()].flatMap((a) => (a.subdomain ? [a.subdomain] : []))),
+  // --- Domains and directories ---
+  const assignments = new Map(files.map((f) => [f.relPath, containersFor(f.relPath)]));
+  const domainPaths = [
+    ...new Set([...assignments.values()].flatMap((a) => (a.domain ? [a.domain] : []))),
+  ].sort();
+  const directoryPaths = [
+    ...new Set([...assignments.values()].flatMap((a) => a.directories)),
   ].sort();
 
-  const docs = harvestDocs(targetRoot, domainPaths, files.map((f) => f.relPath), subdomainPaths);
+  const docs = harvestDocs(targetRoot, domainPaths, files.map((f) => f.relPath), directoryPaths);
 
   // --- Nodes ---
   let repoName = basename(targetRoot);
@@ -168,14 +166,18 @@ export function scanTarget(targetRootInput: string, config: GnosisConfig): Graph
           : undefined,
     });
   }
-  for (const path of subdomainPaths) {
+  // A directory's parent is the next folder up, which is a domain once we
+  // reach the first path segment.
+  const containerId = (path: string): string =>
+    path.includes('/') ? directoryId(path) : domainId(path);
+  for (const path of directoryPaths) {
     const display = domainDisplay(path, config);
     const refs = docs.forDomains.get(path);
     nodes.push({
-      id: domainId(path),
-      kind: 'domain',
+      id: directoryId(path),
+      kind: 'directory',
       name: display.name,
-      parent: domainId(path.split('/')[0]!),
+      parent: containerId(parentPath(path)!),
       doc:
         refs || display.description
           ? { summary: display.description, docFiles: refs }
@@ -185,8 +187,9 @@ export function scanTarget(targetRootInput: string, config: GnosisConfig): Graph
 
   for (const f of files) {
     const assignment = assignments.get(f.relPath)!;
-    const parent = assignment.subdomain
-      ? domainId(assignment.subdomain)
+    const deepest = assignment.directories.at(-1);
+    const parent = deepest
+      ? directoryId(deepest)
       : assignment.domain
         ? domainId(assignment.domain)
         : 'repo';
@@ -257,36 +260,37 @@ export function scanTarget(targetRootInput: string, config: GnosisConfig): Graph
     if (edge.meta!.lines!.length < MAX_EDGE_LINES) edge.meta!.lines!.push(imp.line);
   }
 
-  // --- Rollups ---
-  const byDomain = new Map<string, { files: number; functions: number; loc: number }>();
-  const bump = (path: string, loc: number, fns: number): void => {
-    const entry = byDomain.get(path) ?? { files: 0, functions: 0, loc: 0 };
-    entry.files += 1;
-    entry.functions += fns;
-    entry.loc += loc;
-    byDomain.set(path, entry);
-  };
+  // --- Rollups: every container accumulates what sits beneath it, at any
+  // depth, by walking the parent chain rather than knowing the layer names.
+  const parentOf = new Map(nodes.flatMap((n) => (n.parent ? [[n.id, n.parent] as const] : [])));
+  const rolled = new Map<string, { files: number; functions: number; loc: number }>();
   const fnCountByFile = new Map<string, number>();
   for (const fn of functions) {
     fnCountByFile.set(fn.relPath, (fnCountByFile.get(fn.relPath) ?? 0) + 1);
   }
   for (const f of files) {
-    const assignment = assignments.get(f.relPath)!;
     const fns = fnCountByFile.get(f.relPath) ?? 0;
-    if (assignment.domain) bump(assignment.domain, f.loc, fns);
-    if (assignment.subdomain) bump(assignment.subdomain, f.loc, fns);
+    let current = parentOf.get(fileId(f.relPath));
+    while (current) {
+      const entry = rolled.get(current) ?? { files: 0, functions: 0, loc: 0 };
+      entry.files += 1;
+      entry.functions += fns;
+      entry.loc += f.loc;
+      rolled.set(current, entry);
+      current = parentOf.get(current);
+    }
   }
   for (const node of nodes) {
-    if (node.kind !== 'domain') continue;
-    const stats = byDomain.get(node.id.slice('domain:'.length));
+    const stats = rolled.get(node.id);
     if (stats) node.stats = stats;
   }
-  const repoNode = nodes[0]!;
-  repoNode.stats = {
-    files: files.length,
-    functions: functions.length,
-    loc: files.reduce((sum, f) => sum + f.loc, 0),
-  };
+  // A file carries its own function count too, so "how much of this file is
+  // covered" is answerable without walking its children.
+  for (const node of nodes) {
+    if (node.kind !== 'file') continue;
+    const fns = fnCountByFile.get(node.id.slice('file:'.length)) ?? 0;
+    if (fns) node.stats = { ...node.stats, functions: fns };
+  }
 
   const limitations = [
     'Calls through interface members and callback-typed parameters are dynamic dispatch; they appear only when a test run traces them.',
@@ -295,7 +299,13 @@ export function scanTarget(targetRootInput: string, config: GnosisConfig): Graph
   ];
   if (dangling > 0) limitations.push(`${dangling} resolved call/import sites pointed outside the graph and were dropped.`);
 
-  const kindOrder: Record<GNode['kind'], number> = { repo: 0, domain: 1, file: 2, function: 3 };
+  const kindOrder: Record<GNode['kind'], number> = {
+    repo: 0,
+    domain: 1,
+    directory: 2,
+    file: 3,
+    function: 4,
+  };
   nodes.sort((a, b) => kindOrder[a.kind] - kindOrder[b.kind] || (a.id < b.id ? -1 : 1));
   const sortedEdges = [...edges.values()].sort((a, b) => (a.id < b.id ? -1 : 1));
 

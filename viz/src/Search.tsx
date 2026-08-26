@@ -9,6 +9,7 @@ interface Props {
 const KIND_GLYPH: Record<GNode['kind'], string> = {
   repo: '◉',
   domain: '◆',
+  directory: '▸',
   file: '▤',
   function: '●',
 };
