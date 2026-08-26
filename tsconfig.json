@@ -13,5 +13,5 @@
     "verbatimModuleSyntax": true,
     "noEmit": true
   },
-  "include": ["bin", "src"]
+  "include": ["bin", "src", "poc"]
 }
