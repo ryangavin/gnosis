@@ -59,6 +59,9 @@ body {
   color: var(--dim); background: var(--panel); padding: 7px 11px; border-radius: 7px;
 }
 
+/* The graph's own area: everything below the top bar. */
+.stage { position: fixed; inset: 40px 0 0 0; }
+
 /* ---- nodes ----------------------------------------------------------- */
 
 .box {
@@ -92,10 +95,16 @@ body {
 .container .breadth { font-size: 10.5px; opacity: .72; font-weight: 500; }
 .container:hover { filter: brightness(1.25); }
 
+/* Label top-left, like a container's title bar — treemap convention, and
+   the only thing that reads on a box that fills a quarter of the screen.
+   Overflow clips it on a sliver, which is the right failure. */
 .leaf {
-  display: flex; align-items: center; justify-content: center;
-  padding: 0 8px; font-size: 10.5px; color: #8b98ab; cursor: pointer;
-  text-align: center; line-height: 1.15;
+  display: block; padding: 6px 9px; font-size: 11px; color: #8b98ab;
+  cursor: pointer; line-height: 1.2;
+}
+.leaf .name {
+  display: flex; align-items: center;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .leaf.ran { color: #f4f7ff; }
 .leaf.fn { border-radius: 13px; }
@@ -178,3 +187,5 @@ body {
 .react-flow__minimap {
   background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
 }
+
+.topbar button.on { border-color: #3f7fd0; color: #cfe4ff; background: #14263d; }

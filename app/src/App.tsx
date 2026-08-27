@@ -1,7 +1,7 @@
 /**
- * The whole app: a cut through the graph, laid out by ELK, drawn by React
- * Flow. `open` is the only state that matters — everything else is derived
- * from it, so expanding a folder is one set mutation and a relayout.
+ * The whole app: a cut through the graph, laid out as a treemap, drawn by
+ * React Flow. `open` is the only state that matters — everything else is
+ * derived from it, so expanding a folder is one set mutation and a relayout.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -59,7 +59,10 @@ function Graph({ graph }: { graph: GraphArtifact }) {
   const [lifted, setLifted] = useState<LiftedEdge[]>([]);
   const [ms, setMs] = useState(0);
   const [busy, setBusy] = useState(true);
-  const { fitBounds } = useReactFlow();
+  const [showAll, setShowAll] = useState(false);
+  const [frame, setFrame] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
+  const { setViewport } = useReactFlow();
+  const stageRef = useRef<HTMLDivElement>(null);
   const run = useRef(0);
   // Held in a ref so the layout effect never depends on it — the callback
   // baked into node data must not be what triggers a relayout.
@@ -100,39 +103,75 @@ function Graph({ graph }: { graph: GraphArtifact }) {
       setLifted(liftedEdges);
       setMs(result.ms);
       setBusy(false);
-
-      // fitView waits on React Flow measuring the DOM, which is a frame or
-      // two behind a relayout — it kept framing the *previous* cut. ELK
-      // already told us the exact bounds, so frame those instead.
-      requestAnimationFrame(() => fitBounds(result.bounds, { duration: 400, padding: 0.12 }));
+      setFrame(result.bounds);
     });
-  }, [graph, index, open, hueOf, fitBounds]);
+  }, [graph, index, open, hueOf]);
 
-  // Edges are derived, not stored, so selecting something restyles them
-  // without paying for a relayout. With a selection live, the edges that do
-  // not touch it drop away — the single biggest thing that made a dense cut
-  // unreadable was every line competing equally for attention.
+  /**
+   * Framing, computed rather than delegated.
+   *
+   * Three things had to go. `fitView` measures the DOM and runs a frame
+   * behind a relayout, so it framed the previous cut. `fitBounds` applied
+   * once and then ignored every later call. And `setViewport`'s own
+   * `duration` option is a silent no-op when the pane's zoom behaviour is
+   * not ready yet — which it is not on first paint, so the very call that
+   * sets the opening view did nothing.
+   *
+   * What is left is arithmetic: the stage size is known, the treemap reports
+   * its exact extent, and the transform follows. Applied instantly: a CSS
+   * transition on the viewport fights React Flow for the same property and
+   * leaves the computed transform stuck at identity.
+   */
+  useEffect(() => {
+    const stage = stageRef.current;
+    if (!frame || !stage) return;
+    const { width: vw, height: vh } = stage.getBoundingClientRect();
+    if (!vw || !vh) return;
+
+    const margin = 0.94;
+    const zoom = Math.min((vw * margin) / frame.width, (vh * margin) / frame.height);
+    setViewport({
+      x: (vw - frame.width * zoom) / 2 - frame.x * zoom,
+      y: (vh - frame.height * zoom) / 2 - frame.y * zoom,
+      zoom,
+    });
+  }, [frame, setViewport]);
+
+  /**
+   * Sourcetrail's rule: never draw the whole graph. With nothing selected you
+   * get structure and coverage — which is what "read the architecture"
+   * actually wants — and picking a box brings up only the edges touching it.
+   * Drawing every relation at every level is what makes a dense cut
+   * unreadable, and no amount of routing fixes that.
+   *
+   * `showAll` puts the hairball back when you want to judge density.
+   */
   const edges = useMemo<Edge[]>(() => {
-    return lifted.map((edge, i) => {
-      const touches = selected !== null && (edge.from === selected || edge.to === selected);
-      const muted = selected !== null && !touches;
+    const shown = showAll
+      ? lifted
+      : selected === null
+        ? []
+        : lifted.filter((e) => e.from === selected || e.to === selected);
+
+    return shown.map((edge) => {
+      const focused = selected !== null && (edge.from === selected || edge.to === selected);
       const base = edgeStyle(edge);
       return {
-        id: `e${i}`,
+        id: `${edge.kind}|${edge.from}|${edge.to}`,
         source: edge.from,
         target: edge.to,
         type: 'smoothstep',
         style: {
-          stroke: touches ? '#eaf2ff' : `hsl(${hueOf(edge.from)} 62% 72%)`,
+          stroke: focused ? '#eaf2ff' : `hsl(${hueOf(edge.from)} 62% 72%)`,
           ...base,
-          strokeOpacity: muted ? 0.05 : touches ? 0.95 : base.strokeOpacity,
-          strokeWidth: touches ? Math.max(2, Number(base.strokeWidth) || 1) : base.strokeWidth,
+          strokeOpacity: focused ? 0.95 : base.strokeOpacity,
+          strokeWidth: focused ? Math.max(2, Number(base.strokeWidth) || 1) : base.strokeWidth,
         },
         markerEnd: {
           type: MarkerType.ArrowClosed,
           width: 14,
           height: 14,
-          color: touches ? '#eaf2ff' : '#8b98ab',
+          color: focused ? '#eaf2ff' : '#8b98ab',
         },
         // No zIndex: setting one lifts the edge into a layer above the nodes,
         // where it paints over the controls. And every edge carries a 20px
@@ -142,7 +181,7 @@ function Graph({ graph }: { graph: GraphArtifact }) {
         focusable: false,
       };
     });
-  }, [lifted, selected, hueOf]);
+  }, [lifted, selected, hueOf, showAll]);
 
   const toggle = useCallback(
     (id: string) => {
@@ -191,16 +230,23 @@ function Graph({ graph }: { graph: GraphArtifact }) {
           <em>{folders}</em> folders open
         </span>
         <span>
-          <em>{edges.length}</em> edges
+          <em>{edges.length}</em> of {lifted.length} edges
         </span>
         <span>
           suite <em>{graph.target.testFileCount ?? 0}</em> files
         </span>
-        <span className={busy ? 'busy' : ''}>ELK <em>{ms.toFixed(0)} ms</em></span>
+        <span className={busy ? 'busy' : ''}>layout <em>{ms.toFixed(1)} ms</em></span>
         <span className="hint">click a box to open it · its title bar to close</span>
-        <button onClick={() => setOpen(openPassThrough(index, new Set()))}>reset</button>
+        <button className={showAll ? 'on' : ''} onClick={() => setShowAll((v) => !v)}>
+          {showAll ? 'all edges' : 'edges on focus'}
+        </button>
+        <button onClick={() => { setOpen(openPassThrough(index, new Set())); setSelected(null); }}>reset</button>
       </header>
 
+      {/* The canvas sits below the top bar rather than under it. The bar is
+          fixed and opaque, so anything framed into that strip was both
+          invisible and unclickable — it ate the clicks aimed at it. */}
+      <div className="stage" ref={stageRef}>
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -210,9 +256,8 @@ function Graph({ graph }: { graph: GraphArtifact }) {
         nodesDraggable={false}
         nodesConnectable={false}
         elevateEdgesOnSelect
-        minZoom={0.03}
+        minZoom={0.02}
         maxZoom={4}
-        fitView
       >
         <Background variant={BackgroundVariant.Dots} gap={26} size={1} color="#1b2534" />
         <Controls showInteractive={false} />
@@ -223,6 +268,7 @@ function Graph({ graph }: { graph: GraphArtifact }) {
           maskColor="#080b11cc"
         />
       </ReactFlow>
+      </div>
 
       <Inspector
         node={selectedNode}
