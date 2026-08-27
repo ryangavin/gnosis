@@ -23,23 +23,12 @@ export interface NodeData extends Record<string, unknown> {
 const pct = (n: number | undefined) => (n === undefined ? null : Math.round(n * 100));
 
 /**
- * The expand control. A visible affordance rather than a double-click you
- * have to be told about — and it stops propagation so opening a folder is
- * not also a selection.
+ * Purely a state indicator. The whole box is the click target — a caret is
+ * ~10px, which is not something anyone should have to aim at, and an edge
+ * crossing the box can sit right on top of it.
  */
-function Caret({ id, open, onToggle }: { id: string; open: boolean; onToggle: (id: string) => void }) {
-  return (
-    <button
-      className="caret nodrag"
-      title={open ? 'collapse' : 'expand'}
-      onClick={(e) => {
-        e.stopPropagation();
-        onToggle(id);
-      }}
-    >
-      {open ? '▾' : '▸'}
-    </button>
-  );
+function Caret({ open }: { open: boolean }) {
+  return <span className="caret">{open ? '▾' : '▸'}</span>;
 }
 
 /** Invisible ports; React Flow needs them to anchor an edge. */
@@ -81,8 +70,15 @@ export const ContainerNode = memo(function ContainerNode({ data, selected }: Nod
       }}
     >
       <Ports />
-      <header style={{ color: `hsl(${hue} 72% 78%)` }}>
-        <Caret id={node.id} open={open} onToggle={onToggle} />
+      {/* The one place an open container closes from. Its body is left
+          alone so that reading the contents cannot fold them away. */}
+      <header
+        className="nodrag"
+        style={{ color: `hsl(${hue} 72% 78%)` }}
+        title="collapse"
+        onClick={(e) => { e.stopPropagation(); onToggle(node.id); }}
+      >
+        <Caret open={open} />
         <span className="name">{node.name}</span>
         {breadth !== null && <span className="breadth">{breadth}%</span>}
       </header>
@@ -92,7 +88,7 @@ export const ContainerNode = memo(function ContainerNode({ data, selected }: Nod
 });
 
 export const LeafNode = memo(function LeafNode({ data, selected }: NodeProps) {
-  const { node, hue, hasChildren, dimmed, onToggle } = data as NodeData;
+  const { node, hue, hasChildren, dimmed } = data as NodeData;
   const breadth = node.stats?.testBreadth ?? 0;
   const ran = (node.runtime?.calls ?? 0) > 0 || breadth > 0;
   const isFn = node.kind === 'function';
@@ -108,7 +104,7 @@ export const LeafNode = memo(function LeafNode({ data, selected }: NodeProps) {
     >
       <Ports />
       <span className="name">
-        {hasChildren && <Caret id={node.id} open={false} onToggle={onToggle} />}
+        {hasChildren && <Caret open={false} />}
         {node.name}
       </span>
       <CoverageRule node={node} hue={hue} />

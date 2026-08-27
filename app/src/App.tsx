@@ -56,14 +56,13 @@ function Graph({ graph }: { graph: GraphArtifact }) {
   const [open, setOpen] = useState<Set<string>>(() => openPassThrough(index, new Set()));
   const [selected, setSelected] = useState<string | null>(null);
   const [nodes, setNodes] = useState<Node[]>([]);
-  const [edges, setEdges] = useState<Edge[]>([]);
   const [lifted, setLifted] = useState<LiftedEdge[]>([]);
   const [ms, setMs] = useState(0);
   const [busy, setBusy] = useState(true);
   const { fitBounds } = useReactFlow();
   const run = useRef(0);
-  // Held in a ref so the layout effect never has to depend on it — the
-  // callback baked into node data must not be what triggers a relayout.
+  // Held in a ref so the layout effect never depends on it — the callback
+  // baked into node data must not be what triggers a relayout.
   const toggleRef = useRef<(id: string) => void>(() => {});
 
   useEffect(() => {
@@ -98,17 +97,6 @@ function Graph({ graph }: { graph: GraphArtifact }) {
           } satisfies NodeData,
         })),
       );
-      setEdges(
-        liftedEdges.map((edge, i) => ({
-          id: `e${i}`,
-          source: edge.from,
-          target: edge.to,
-          type: 'smoothstep',
-          style: { stroke: `hsl(${hueOf(edge.from)} 62% 72%)`, ...edgeStyle(edge) },
-          markerEnd: { type: MarkerType.ArrowClosed, width: 14, height: 14, color: '#8b98ab' },
-          zIndex: 1,
-        })),
-      );
       setLifted(liftedEdges);
       setMs(result.ms);
       setBusy(false);
@@ -116,14 +104,45 @@ function Graph({ graph }: { graph: GraphArtifact }) {
       // fitView waits on React Flow measuring the DOM, which is a frame or
       // two behind a relayout — it kept framing the *previous* cut. ELK
       // already told us the exact bounds, so frame those instead.
-      requestAnimationFrame(() =>
-        fitBounds(
-          { x: 0, y: 0, width: result.width, height: result.height },
-          { duration: 400, padding: 0.12 },
-        ),
-      );
+      requestAnimationFrame(() => fitBounds(result.bounds, { duration: 400, padding: 0.12 }));
     });
   }, [graph, index, open, hueOf, fitBounds]);
+
+  // Edges are derived, not stored, so selecting something restyles them
+  // without paying for a relayout. With a selection live, the edges that do
+  // not touch it drop away — the single biggest thing that made a dense cut
+  // unreadable was every line competing equally for attention.
+  const edges = useMemo<Edge[]>(() => {
+    return lifted.map((edge, i) => {
+      const touches = selected !== null && (edge.from === selected || edge.to === selected);
+      const muted = selected !== null && !touches;
+      const base = edgeStyle(edge);
+      return {
+        id: `e${i}`,
+        source: edge.from,
+        target: edge.to,
+        type: 'smoothstep',
+        style: {
+          stroke: touches ? '#eaf2ff' : `hsl(${hueOf(edge.from)} 62% 72%)`,
+          ...base,
+          strokeOpacity: muted ? 0.05 : touches ? 0.95 : base.strokeOpacity,
+          strokeWidth: touches ? Math.max(2, Number(base.strokeWidth) || 1) : base.strokeWidth,
+        },
+        markerEnd: {
+          type: MarkerType.ArrowClosed,
+          width: 14,
+          height: 14,
+          color: touches ? '#eaf2ff' : '#8b98ab',
+        },
+        // No zIndex: setting one lifts the edge into a layer above the nodes,
+        // where it paints over the controls. And every edge carries a 20px
+        // invisible hit path by default, which swallowed clicks aimed at
+        // whatever sat underneath. We never click an edge.
+        interactionWidth: 0,
+        focusable: false,
+      };
+    });
+  }, [lifted, selected, hueOf]);
 
   const toggle = useCallback(
     (id: string) => {
@@ -145,13 +164,16 @@ function Graph({ graph }: { graph: GraphArtifact }) {
   );
   toggleRef.current = toggle;
 
+  // Opening is easy, closing is deliberate. A collapsed box opens anywhere
+  // you hit it — a big target, nothing to aim at. An open container closes
+  // only from its title bar, so that brushing its background while reading
+  // what is inside does not fold the whole thing away.
   const onNodeClick = useCallback(
-    (_: React.MouseEvent, node: Node) => setSelected(node.id),
-    [],
-  );
-  const onNodeDoubleClick = useCallback(
-    (_: React.MouseEvent, node: Node) => toggle(node.id),
-    [toggle],
+    (_: React.MouseEvent, node: Node) => {
+      setSelected(node.id);
+      if (!open.has(node.id)) toggle(node.id); // no-op for a childless leaf
+    },
+    [toggle, open],
   );
 
   const selectedNode: GNode | null = selected ? (index.byId.get(selected) ?? null) : null;
@@ -175,7 +197,7 @@ function Graph({ graph }: { graph: GraphArtifact }) {
           suite <em>{graph.target.testFileCount ?? 0}</em> files
         </span>
         <span className={busy ? 'busy' : ''}>ELK <em>{ms.toFixed(0)} ms</em></span>
-        <span className="hint">click ▸ to open a folder · click a box for its numbers</span>
+        <span className="hint">click a box to open it · its title bar to close</span>
         <button onClick={() => setOpen(openPassThrough(index, new Set()))}>reset</button>
       </header>
 
@@ -184,7 +206,6 @@ function Graph({ graph }: { graph: GraphArtifact }) {
         edges={edges}
         nodeTypes={nodeTypes}
         onNodeClick={onNodeClick}
-        onNodeDoubleClick={onNodeDoubleClick}
         onPaneClick={() => setSelected(null)}
         nodesDraggable={false}
         nodesConnectable={false}

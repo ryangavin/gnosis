@@ -70,24 +70,24 @@ body {
 .box.dimmed { opacity: .35; }
 .box.selected { box-shadow: 0 0 0 2px #fff inset; }
 .box .name { display: block; }
-/* A 9px glyph is not a click target. The arrow stays small; the hit area
-   around it does not, pulled back with negative margin so the layout is
-   unchanged. */
+/* State indicator only — the box is the button. */
 .box .caret {
-  background: none; border: 0; color: currentColor; font: inherit;
-  font-size: 10px; line-height: 1; opacity: .55; cursor: pointer;
-  padding: 6px 7px; margin: -6px 0 -6px -5px;
-  border-radius: 5px; pointer-events: all; flex: none;
+  color: currentColor; font-size: 10px; line-height: 1; opacity: .5;
+  margin-right: 5px; flex: none;
 }
-.box .caret:hover { opacity: 1; background: #ffffff1f; }
 
 .container { border-radius: 10px; }
 .container header {
-  display: flex; align-items: baseline; gap: 6px;
-  padding: 6px 10px 0; font-size: 12px; font-weight: 600;
-  letter-spacing: .01em; pointer-events: none;
-
+  display: flex; align-items: center;
+  height: 30px; padding: 0 10px; font-size: 12px; font-weight: 600;
+  letter-spacing: .01em; cursor: pointer; pointer-events: all;
+  border-radius: 9px 9px 0 0;
 }
+.container header:hover { background: #ffffff14; }
+.container header:hover .caret { opacity: 1; }
+.container .breadth { margin-left: 6px; }
+/* An open container's body is inert — only its title bar closes it. */
+.container { cursor: default; }
 .container.dir header { font-size: 11px; font-weight: 500; opacity: .85; }
 .container .breadth { font-size: 10.5px; opacity: .72; font-weight: 500; }
 .container:hover { filter: brightness(1.25); }
@@ -162,6 +162,14 @@ body {
 
 .react-flow__node { font: inherit; }
 .react-flow__node-container { pointer-events: all; }
+
+/* Edges are scenery, never targets. Belt and braces alongside
+   interactionWidth: 0 — nothing in the edge layer should ever intercept a
+   click meant for a node underneath it. */
+.react-flow__edges,
+.react-flow__edge,
+.react-flow__edge-path,
+.react-flow__edge-interaction { pointer-events: none !important; }
 .react-flow__attribution { background: transparent; color: #2b3646; }
 .react-flow__controls-button {
   background: var(--panel); border-bottom: 1px solid var(--line); fill: var(--ink);
